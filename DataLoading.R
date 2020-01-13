@@ -50,7 +50,9 @@ for(i in 1:length(apli_xd)){
             fname=paste("data/apli_xd/",paste(names(apli_xd)[i],
                                           ".raw", sep = ""), sep=""))
 }
-
+write.rwl(as.data.frame(apli.sites[[2]]),
+          fname=paste("data/apli_raw/",paste(names(apli.sites)[2],
+                                            ".raw",sep=""),sep=""))
 #### Lampsilis ------
 rw.long.lamp<-rw.long %>% 
   filter(Species %in% c("LCAR","LORN")) %>%
