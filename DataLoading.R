@@ -38,21 +38,21 @@ for(i in 1:length(apli.sites)){
                        ".csv", sep = ""), sep=""))
 }
 
-temp<-paste("data/apli_xd/",list.files(path="data/apli_xd"), sep="")
+temp<-paste("data/apli_raw/physxd/",
+            list.files(path="data/apli_raw/physxd/"), sep="")
 for (i in 1:length(temp)){
   apli_xd = lapply(temp, read.csv,row.names = "X")
 } 
-names(apli_xd)<-gsub(".csv","",gsub("data/apli_xd/","",temp))
+names(apli_xd)<-gsub(".csv","",gsub("data/apli_raw/physxd","",temp))
 
 #exporting each species at each site to raw
 for(i in 1:length(apli_xd)){
   write.rwl(as.data.frame(apli_xd[[i]]),
-            fname=paste("data/apli_xd/",paste(names(apli_xd)[i],
+            fname=paste("data/apli_raw/",paste(names(apli_xd)[i],
                                           ".raw", sep = ""), sep=""))
 }
-write.rwl(as.data.frame(apli.sites[[2]]),
-          fname=paste("data/apli_raw/",paste(names(apli.sites)[2],
-                                            ".raw",sep=""),sep=""))
+
+
 #### Lampsilis ------
 rw.long.lamp<-rw.long %>% 
   filter(Species %in% c("LCAR","LORN")) %>%
