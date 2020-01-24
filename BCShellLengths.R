@@ -26,11 +26,12 @@ AxW<-AxW1 %>% filter(!is.na(AnGrowth)) %>% rename(Year=X) %>%
          propGrowth=cumGrowth/sum(AnGrowth)*100,
          Age=Year-min(Year)+1) %>%
   left_join(SlideData[,-c(1:6)], by=c("RawName")) %>%
+  left_join(ShellDim, by=c("ShellIDy"="Shell.ID")) %>%
   # multiply that proportion by the 'shell extent' to get ~width
-  mutate(est.Width=propGrowth*Width/100) %>%
+  mutate(est.Width=propGrowth*Width.y/100) %>%
   rename(Shell.ID=FileName) %>%
   group_by(Shell.ID) %>%
-  select(-ShellIDy, -RawName,-Width,-curv.width,-ruler.width)
+  select(-ShellIDy, -RawName,-Width.x,-curv.width,-ruler.width)
 
 # use shell dim to get regression coefficient to translate width to length
 #### anchoring regressions 
@@ -50,16 +51,16 @@ reg<-ShellDim %>% bind_rows(anchor) %>%
          Hb=lm(Length~Width)$coefficients[2])
 
 # apply regression to build age x length table
-AxL<-AxW %>% left_join(ShellDim) %>%
+AxL<-AxW %>% 
   left_join(reg, by=c("Site.Agg","Species")) %>%
   mutate(est.Length=Ha+est.Width*Hb,
          Age.adj=Age+as.numeric(start.annuli)) %>%
   select(Species,Site,Year, Shell.ID,  AnGrowth,
-         Age, Age.adj, age, est.Length,Length, est.Width) %>%
-  rename(id=Shell.ID, L=est.Length)
+         Age.adj,Age, age, est.Length,Length, est.Width) %>%
+  rename(id=Shell.ID, L=est.Length, Age.unadj=Age,Age=Age.adj)
 
 #check the shells that had eroded umbos (age underestimate)
-AxL %>% filter(Age.adj-Age > 0) %>% slice(1)
+AxL %>% filter(Age.unadj-Age < 0) %>% slice(1)
 
 # assess difference between final est.Length and real Length
 AxL %>% select(Species, Site, id,Year, L, Length, age) %>%
@@ -67,12 +68,80 @@ AxL %>% select(Species, Site, id,Year, L, Length, age) %>%
   slice(n()) %>% arrange(desc(dif.Length))
 
 APLIaxl<-AxL %>% filter(Species=="APLI")
-LAMPaxl<-AxL %>% filter(Species %in% c("LCAR","LORN"))
+LAMPaxl<-AxL %>% filter(Species %in% c("LCAR","LORN")) %>%
+   #left_join(SiteID, by=c("Site"="SiteID")) %>% 
+  select(Site, Species, id, Age, L)
 
-# recommended MF back calculation model
-#Li = x.75Lop + exp(log(Lop-x.75Lop)+
-#                (log(Length-x.75Lop)-log(Lop-x.75Lop)*(log(Radi)-log(Radop)))/
-#                (log(Radcap)-log(Radop)))
+# Bayesian von Bertanlanffy's
+library(brms)
+set.seed(6363) #set random number seed for replicable analysis
+
+### testing priors 
+hist(rstudent_t(1000, 3,0,10)) #default prior on sd(TankIntercept)
+hist(rgamma(1000,0.01,0.01), xlim=c(0,70)) # prior on shape of Treat:Day relationship
+hist(rnorm(1000, 0,1)) # prior on beta (Treat:Day interaction)
+hist(rnorm(1000, 100,50)) # prior on beta (Treat:Day interaction)
+hist(rnorm(1000, .5,.001)) # prior on beta (Treat:Day interaction)
+
+
+# Von Bertanlanffy's model
+# L = Lmax*(1-exp(-K*(Age-t0)))
+LampD<-LAMPaxl %>% left_join(SiteID, by=c('Site'='SiteID')) %>%
+  dplyr::select(Site, id, Age, L, Latitude)
+
+##### Model Code #####
+model_string<- "model {
+  # likelihood
+  for (j in 1:length(id)) {  
+    # varying Lmax/K/t0 for every site
+      L[j] ~ dnorm(mu[j],tau) 
+      mu[j]<-Lmax*(1-exp(-K*(Age[j]-T0)))
+      #mu[j]<-Lmax[Site[m]] * (1-exp(-K[Site[m]]*(Age[j]-T0[Site[m]])))
+      #Lmax[Site[j]]<-Latitude-1
+  }
+  # priors
+  tau ~ dgamma(0.001, 0.001) #variance on L
+  Lmax ~ dnorm(100, 50)
+  K ~ dnorm(0.4, 0.5)
+  T0 ~ dnorm(0, 0.01)
+  }"
+
+
+inits<-list(Lmax=100,
+            K=.5,
+            T0=.1)
+
+#run the model
+library(rjags);library(MCMCpack)
+NHmodel<-jags.model(textConnection(model_string), 
+                    data=LampD, 
+                    inits=inits,
+                    n.chains=3, n.adapt=30000)
+update(NHmodel, 10000) # burn in for 2000 samples
+NHmcmc<-coda.samples(NHmodel,
+                     variable.names=c("Lmax","K", "T0"), 
+                     n.iter=5000, thin=40)
+pdf('mcmcDiagnostic/nh4mcmcdiag.pdf')
+plot(NHmcmc)
+gelman.plot(NHmcmc)
+dev.off()
+
+summary(NHmcmc)
+NH4mcmc.data<-as.matrix(NHmcmc); colnames(NH4mcmc.data)
+
+
+
+
+# quantifying the % probability response increased after impact
+1-ecdf(as.matrix(nhBACIgraph[nhBACIgraph$ratio=="BACIdc",2]))( 1 ) 
+nhBACIgraph %>% group_by(ratio) %>% dplyr::summarize(meanBACI=mean(value))
+1-ecdf(as.matrix(nhBACIgraph[nhBACIgraph$ratio=="BACIdc",2]))( 1.5 ) 
+marginal_effects(nhBmodel)$`TreF:DayF` %>% 
+  select(TreF, DayF, estimate__, lower__,upper__) %>%
+  filter(DayF==4)
+
+
+
 
 # vonBertanlanffys - Vigliola & Meekan 2009
 library(grid);library(lattice);library(stats);library(nlme)
@@ -94,51 +163,38 @@ EXP=function(x,L0,K){
   y
 }
 
-for(q in 1:4){#length(unique(LCdatgr$Site))){
-  subLCdata<- LAMPaxl %>% filter(Site==unique(LCdatgr$Site)[q])
+
+
+LCAR.nlme.res<-list()
+LCAR.nlme.sum<-NULL
+for(q in 2:length(unique(LAMPaxl$Site))){
+  subLCdata<- LAMPaxl %>% filter(Site==unique(LAMPaxl$Site)[q])
   LCdatgr<-groupedData(L~Age|id, data=subLCdata,
               labels=list(x="Age",y="Size"),
               units=list(x="Years",y="mm"))
+  
   LVB.nlme.LC<-nlme(L~LVB(Age,t0,Lmax,K), data=LCdatgr,
                     fixed=list(t0~1, Lmax~1, K~1),
                     random=t0+Lmax+K~1,
-                    start=list(fixed=c(to=-0.02, Lmax=120,K=0.4)))
-  
+                    start=list(fixed=c(t0=.2, Lmax=100,K=0.45)),
+                    control=nlmeControl(maxIter = 200, msMaxIter = 200))
+  LCAR.nlme.res[[unique(LAMPaxl$Site)[q]]] <- LVB.nlme.LC
+  lcv<-data.frame(Site=unique(LAMPaxl$Site)[q],
+                  t0=LVB.nlme.LC$coefficients$fixed[1], 
+                  Lmax=LVB.nlme.LC$coefficients$fixed[2],
+                  K=LVB.nlme.LC$coefficients$fixed[3])
+  LCAR.nlme.sum<-rbind(LCAR.nlme.sum, lcv)
 }
+
+
 EXP.nlme.LC=nlme(L~EXP(age,L0,K), data=LCdatgr,
               fixed=list(L0~1, K~1),
               random=L0+K~1,
               start=list(fixed=c(L0=2,K=0.06)))
 
-summary(LVB.nlme)
+summary(LVB.nlme.LC)
 intervals(LVB.nlme)
-anova(LVB.nlme)
-plot(LVB.nlme)
-plot(augPred(LVB.nlme, level=0:1))
-coef(LVB.nlme)
-
-#### Predicting shell growth with non-linear models ####
-library(nlme)
-library(FSA)
-library(nlstools)
-
-VBcoef<-NULL
-agesites<-NULL
-agesites<-unique(LAMPaxl$Site)
-vbTypical <- L~Linf*(1-exp(-K*(Age-L0)))
-for(k in 1:length(agesites)){
-  drac<-subset(LAMPaxl, site==as.character(agesites[k]))
-  yay<-vbStarts(drac$length~drac$age, 
-                param = "vonBertalanffy", 
-                methLinf="Walford")
-  blo<-data.frame(site=agesites[k], t(unlist(yay)))
-  VBcoef<-rbind(VBcoef, blo)
-  yay<-NULL
-}  
-
-fit87<-nls(vbTypical,data=AgeLengths[AgeLengths$site==agesites[1],], start=VBcoef[1,2:4])
-plot(AgeLengths[AgeLengths$site==agesites[1],4], AgeLengths[AgeLengths$site==agesites[1],5],
-     xlab="Age", ylab="Shell Length (mm)", main="Lampsilis cardium from Kishwaukee River", pch=19)
-lines(seq(1:18), predict(fit87)[200:217], lwd=2)
-sum87<-summary(fit87)
-sum87
+anova(LVB.nlme.LC)
+plot(LVB.nlme.LC)
+plot(augPred(LVB.nlme.LC, level=0:1))
+coef(LVB.nlme.LC)
