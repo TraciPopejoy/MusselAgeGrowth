@@ -1,10 +1,34 @@
-library(readxl);library(dplR);library(ggplot2)
+library(readxl);library(dplR);library(ggplot2); library(tidyverse)
 
 # pull in adjusted, final crossdated shell growth annuli
-# sum all growth annuli
-# divide individual growth annuli by sum of all growth annuli
-# multiply that proportion by the 'shell extent' to get ~width
-AxW
+apfiles1<-paste("data/apli_raw/physxd_fin/",
+               list.files(path="data/apli_raw/physxd_fin/"), sep="")
+lcfiles1<-paste("data/lamp_raw/physxd_fin/",
+                list.files(path="data/lamp_raw/physxd_fin/"), sep="")
+AxW1<-NULL
+for (i in 1:length(apfiles1)){
+  axws <- read.csv(apfiles1[i]) %>% gather(ShellIDy,AnGrowth,-X)
+  AxW1<-rbind(AxW1, axws)
+} 
+
+for (i in 1:length(lcfiles1)){
+  axws <- read.csv(lcfiles1[i]) %>% gather(ShellIDy,AnGrowth,-X)
+  AxW1<-rbind(AxW1, axws)
+} 
+
+# use annual growth annuli to build age x width table
+AxW<-AxW1 %>% filter(!is.na(AnGrowth)) %>% rename(Year=X) %>%
+  group_by(ShellIDy) %>%
+  mutate(RawName=case_when(substr(ShellIDy,1,1)=="X"~substr(ShellIDy,2,10),
+                            T~ShellIDy),
+         cumGrowth=cumsum(AnGrowth), #cumulative growth along the margin
+         # divide individual growth annuli by sum of all growth annuli
+         propGrowth=cumGrowth/sum(AnGrowth)*100,
+         Age=Year-min(Year)+1) %>%
+  left_join(SlideData[,-c(1:6)], by=c("RawName")) %>%
+  # multiply that proportion by the 'shell extent' to get ~width
+  mutate(straitGrowth=propGrowth*Width/100) %>%
+  rename(Shell.ID=FileName)
 
 # use shell dim to get regression coefficient to translate width to length
 #### anchoring regressions 

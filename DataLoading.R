@@ -17,6 +17,7 @@ rw.long<-rw %>% gather(Shell.ID, annuli.growth, -Year) %>%
 
 View(rw.long %>% group_by(Site.Agg, Species) %>% 
   summarize(length(unique(Shell.ID))))
+# NA because problem shells or duplicate pictures
 
 rw.long.apli<-rw.long %>% filter(Species=="APLI") %>%
   select(-Shell.ID.y, -PS)
@@ -34,25 +35,22 @@ names(apli.sites)<-unique(rw.long.apli$Site.Agg)
 # exporting excel to do physical crossdating
 for(i in 1:length(apli.sites)){
   write.csv(as.data.frame(apli.sites[[i]]),
-            file=paste("apli_raw/excel/",
+            file=paste("data/apli_raw/excel/",
                        paste(names(apli.sites)[i],
                        ".csv", sep = ""), sep=""))
 }
 
-temp<-paste("data/apli_raw/physxd/",
-            list.files(path="data/apli_raw/physxd/"), sep="")
-for (i in 1:length(temp)){
-  apli_xd = lapply(temp, read.csv,row.names = "X")
-} 
-names(apli_xd)<-gsub(".csv","",gsub("data/apli_raw/physxd","",temp))
-
+apfiles<-paste("data/apli_raw/physxd_fin/",
+            list.files(path="data/apli_raw/physxd_fin/"), sep="")
+apli_xd = lapply(apfiles, read.csv,row.names = "X")
+names(apli_xd)<-gsub(".csv","",gsub("data/apli_raw/physxd_fin/","",apfiles))
 #exporting each species at each site to raw
 for(i in 1:length(apli_xd)){
   write.rwl(as.data.frame(apli_xd[[i]]),
             fname=paste("data/apli_raw/",paste(names(apli_xd)[i],
-                                          ".raw", sep = ""), sep=""))
+                                          ".raw", sep = ""), sep=""),
+            format="compact")
 }
-
 
 #### Lampsilis ------
 rw.long.lamp<-rw.long %>% 
@@ -75,6 +73,22 @@ for(i in 1:length(lamp.sites)){
             file=paste("data/lamp_raw/excel/",paste(names(lamp.sites)[i],
                                                ".csv", sep = ""), sep=""))
 }
+
+lcfiles<-paste("data/lamp_raw/physxd_fin/",
+               list.files(path="data/lamp_raw/physxd_fin/"), sep="")
+for (i in 1:length(lcfiles)){
+  lamp_xd = lapply(lcfiles, read.csv,row.names = "X")
+} 
+names(lamp_xd)<-gsub(".csv","",gsub("data/lamp_raw/physxd_fin/","",lcfiles))
+
+#exporting each species at each site to raw
+for(i in 1:length(lamp_xd)){
+  write.rwl(as.data.frame(lamp_xd[[i]]),
+            fname=paste("data/lamp_raw/",paste(names(lamp_xd)[i],
+                                               ".raw", sep = ""), sep=""),
+            format="compact")
+}
+
 # Tritigonia verrucosa ------
 rw.long.qver<-rw.long %>% 
   filter(Species=="QVER") %>%
