@@ -15,12 +15,6 @@ hist(rgamma(1000,.01,.01),breaks=800,xlim=c(0,1)) #variance on tauk
 
 # Von Bertanlanffy's model
 # L = Lmax*(1-exp(-K*(Age-t0)))
-LampD<-LAMPaxl %>% left_join(SiteID, by=c('Site'='SiteID')) %>%
-  dplyr::select(Site, id, Age, L, Latitude) %>%
-  ungroup()%>%
-  mutate(SiteF=as.factor(Site),
-         idF=as.factor(id)) %>%
-  dplyr::select(-Site, -id)
 
 library(rjags);library(MCMCpack)
 ##### Model Code #####
@@ -28,84 +22,104 @@ model_string<- "model {
 # likelihood
 for (i in 1:nobs){ # each row
 L[i] ~ dnorm(mu[i],tau) 
-mu[i] <- Lmax[Species[i],SiteF[i],idF[i]] * (1-exp(-K[Species[i],SiteF[i],idF[i]] * (Age[i] - T0[Species[i],SiteF[i],idF[i]])))
+mu[i] <- Lmax[SiteF[i],idF[i]] * (1-exp(-K[SiteF[i],idF[i]] * (Age[i] - T0[SiteF[i],idF[i]])))
 Latitude[i] ~dnorm(Lat_mu[i], tau_lat)
-Lat_mu[i]<-beta[Species[i]]*Lmax_bar[Species[i],SiteF[i]]
+Lat_mu[i]<-beta*Lmax_bar[SiteF[i]]
 }
 # priors
 tau ~ dgamma(0.1, 0.1) #variance on L
 tau_lat~dgamma(1, 10) #variance on Latitude
+beta ~ dnorm(0,20)
 
-for(y in 1:2){
 for (s in 1:nsite) { # loop over sites
 for(u in 1:nid){
 # so Lmax, K and T0 will be unique for each site
-Lmax[y,s,u] ~ dnorm(mu_l[y,s], tau_l[y,s])
-K[y,s,u] ~ dnorm(muk[y,s], tauk[y,s])
-T0[y,s,u] ~ dnorm(mu_t0[y,s], tau_t0[y,s])
+Lmax[s,u] ~ dnorm(mu_l[s], tau_l[s])
+K[s,u] ~ dnorm(muk[s], tauk[s])
+T0[s,u] ~ dnorm(mu_t0[s], tau_t0[s])
 }
 
 #get average Lmax, K, T0 for each site
-Lmax_bar[y,s]<- mean(Lmax[y,s, 1:210])
-K_bar[y,s]<- mean(K[y,s, 1:210])
-T0_bar[y,s]<- mean(T0[y,s, 1:210])
+Lmax_bar[s]<- mean(Lmax[s, 1:nid])
+K_bar[s]<- mean(K[s, 1:nid])
+T0_bar[s]<- mean(T0[s, 1:nid])
 
 # hyper parameter priors
-mu_l[y,s] ~ dunif(10, 200)
-tau_l[y,s] ~ dgamma(1,1)
+mu_l[s] ~ dunif(10, 200)
+tau_l[s] ~ dgamma(1,1)
 
-muk[y,s] ~ dnorm (0.5, 1)
-tauk[y,s] ~ dgamma(.1,.1)
+muk[s] ~ dnorm (0.5, 1)
+tauk[s] ~ dgamma(.1,.1)
 
-mu_t0[y,s] ~ dnorm (0, 0.1)
-tau_t0[y,s] ~ dgamma(.01,.01)
-}
-beta[y] ~ dnorm(0,20)
+mu_t0[s] ~ dnorm (0, 0.1)
+tau_t0[s] ~ dgamma(.01,.01)
 }
 }"
-#loop lengths
-nid<-length(unique(data$idF))
-nobs<-nrow(data)
-nsite<-length(unique(data$SiteF))
 
-#can't figure out the dimensions for these so removing
-inits<-list(Lmax=matrix(rep(100,2839),nrow=28),
-            K=rep(.5,2839),
-            T0=rep(.001,2839),nrow=28))
+# Lampsilis model -----------
+#loop lengths
+nidL<-length(unique(dataL$idF))
+nobsL<-nrow(dataL)
+nsiteL<-length(unique(dataL$SiteF))
 
 #run the model
-NHmodel<-jags.model(textConnection(model_string), 
-                    data=list(Species=data$SpF,
-                              L=data$L,
-                              Age=data$Age,
-                              Latitude=data$Latitude,
-                              SiteF=data$SiteF,
-                              idF=data$idF,
-                              nid=nid,
-                              nobs=nobs,
-                              nsite=nsite),
-                    #  inits=inits,
-                    n.chains=3, n.adapt=1000)
-update(NHmodel, 1000) # burn in for 2000 samples
-NHmcmc<-coda.samples(NHmodel,
-                     variable.names=c("Lmax_bar", "beta",
-                                      "K_bar","T0_bar"), 
+L.model<-jags.model(textConnection(model_string), 
+                    data=list(L = dataL$L,
+                              Age = dataL$Age,
+                              Latitude = dataL$Latitude,
+                              SiteF = dataL$SiteF,
+                              idF = dataL$idF,
+                              nid=nidL,
+                              nobs=nobsL,
+                              nsite=nsiteL),
+                     inits=list(Lmax=matrix(rep(100,1536),nrow=16),
+                                K=matrix(rep(.5,1536),nrow=16),
+                                T0=matrix(rep(.001,1536),nrow=16)),
+                    n.chains=3, n.adapt=100000)
+update(L.model, 10000) # burn in for 2000 samples
+Lmcmc<-coda.samples(L.model,
+                     variable.names=c("Lmax_bar", "beta", "K_bar","T0_bar"), 
                      n.iter=5000, thin=40)
-pdf('mcmcdiag.pdf')
-plot(NHmcmc)
-gelman.plot(NHmcmc)
+pdf('LampMcmcDiag.pdf')
+plot(Lmcmc)
+gelman.plot(Lmcmc)
 dev.off()
 
-summary(NHmcmc)
-NH4mcmc.data<-as.matrix(NHmcmc); colnames(NH4mcmc.data)
+summary(Lmcmc)
+Lmcmc.data<-as.matrix(Lmcmc); colnames(Lmcmc.data)
 
-# quantifying the % probability response increased after impact
-1-ecdf(as.matrix(nhBACIgraph[nhBACIgraph$ratio=="BACIdc",2]))( 1 ) 
-nhBACIgraph %>% group_by(ratio) %>% dplyr::summarize(meanBACI=mean(value))
-1-ecdf(as.matrix(nhBACIgraph[nhBACIgraph$ratio=="BACIdc",2]))( 1.5 ) 
-marginal_effects(nhBmodel)$`TreF:DayF` %>% 
-  select(TreF, DayF, estimate__, lower__,upper__) %>%
-  filter(DayF==4)
+# Amblema model -----------
+#loop lengths
+nidA<-length(unique(dataA$idF))
+nobsA<-nrow(dataA)
+nsiteA<-length(unique(dataA$SiteF))
+
+#run the model
+A.model<-jags.model(textConnection(model_string), 
+                    data=list(L = dataA$L,
+                              Age = dataA$Age,
+                              Latitude = dataA$Latitude,
+                              SiteF = dataA$SiteF,
+                              idF = dataA$idF,
+                              nid=nidA,
+                              nobs=nobsA,
+                              nsite=nsiteA),
+                    inits=list(Lmax=matrix(rep(100,2736),nrow=24),
+                               K=matrix(rep(.5,2736),nrow=24),
+                               T0=matrix(rep(.001,2736),nrow=24)),
+                    n.chains=3, n.adapt=100000)
+update(A.model, 10000) # burn in for 2000 samples
+Amcmc<-coda.samples(A.model,
+                     variable.names=c("Lmax_bar", "beta", "K_bar","T0_bar"), 
+                     n.iter=5000, thin=40)
+pdf('AMcmcDiag.pdf')
+plot(Amcmc)
+gelman.plot(Amcmc)
+dev.off()
+
+summary(Amcmc)
+Amcmc.data<-as.matrix(Amcmc); colnames(Amcmc.data)
+
 
 # PLOTS ######
 #pull results from summary(mcmc) to get into long dataframe
