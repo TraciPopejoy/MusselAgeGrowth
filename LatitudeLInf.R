@@ -1,34 +1,34 @@
-library(readxl);library(dplR);library(ggplot2)
-
-SiteID<-read_excel('data/!GrowthRawData.xlsx', sheet="Location")
-
-# take Linf for each population and match it with Latitude
-latxVB <- VB %>% SiteID
-
-library(brms)
-set.seed(6363) #set random number seed for replicable analysis
+head(Amcmc.data); head(Lmcmc.data)
 
 ### testing priors 
-hist(rstudent_t(1000, 3,0,10)) #default prior on sd(TankIntercept)
-hist(rgamma(1000,0.01,0.01), xlim=c(0,70)) # prior on shape of Treat:Day relationship
-hist(rnorm(1000, 0,5)) # prior on beta (Treat:Day interaction)
+hist(rnorm(1000,0,10)) # prior on beta
 
-#### Ammonium analysis ####
-model<-brm(Linf~Latitude-1, data=latxVB,
-              family=Gamma(link='log'), 
-              prior=c(prior(normal(0,5), class="b"),
-                      prior(gamma(0.01,0.01), class="shape")),
-              chains=4, iter=2000)
+beta_model_string<- "model {
+# likelihood
+for (i in 1:nobs){ # each row
+Latitude[i] ~ dnorm(lat[i],tau) 
+lat[i]<- beta*mu_l[i]
+}
+# priors
+tau ~ dgamma(0.1, 0.1) #variance on L
+beta ~ dnorm(0,20)
+}"
 
-print(model, prior=T)
-plot(marginal_effects(model)) #check it is reproducing data well
-#pull out posterior samples for each parameter
-post_model<-posterior_samples(model) 
+# Lampsilis x Latitude model -----------
+#loop lengths
+nobsL<-nrow(Lmcmc.data)
 
-# quantifying the % probability response increased after impact
-1-ecdf(as.matrix(nhBACIgraph[nhBACIgraph$ratio=="BACIdc",2]))( 1 ) 
-nhBACIgraph %>% group_by(ratio) %>% dplyr::summarize(meanBACI=mean(value))
-1-ecdf(as.matrix(nhBACIgraph[nhBACIgraph$ratio=="BACIdc",2]))( 1.5 ) 
-marginal_effects(nhBmodel)$`TreF:DayF` %>% 
-  select(TreF, DayF, estimate__, lower__,upper__) %>%
-  filter(DayF==4)
+#run the model
+L.beta.model<-jags.model(textConnection(beta_model_string), 
+                    data=list(mu_l=lamp.mcmc.data$mu_l,
+                              Latitude = lamp.mcmc.data$Latitude,
+                              nobs=nobsL),
+                    n.chains=3, n.adapt=2000)
+update(L.beta.model, 20000) # burn in for 2000 samples
+Lbeta.mcmc<-coda.samples(L.beta.model,
+                    variable.names=c("beta"), 
+                    n.iter=100000, thin=3)
+pdf('LbetaMCMCdiag.pdf')
+plot(Lbeta.mcmc)
+gelman.plot(Lbeta.mcmc)
+dev.off()

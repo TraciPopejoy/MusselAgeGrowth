@@ -1,5 +1,4 @@
-library(tidyverse);library(readxl)
-library(dplR)
+library(tidyverse);library(readxl);library(dplR)
 
 #load in data
 rw<-read_excel('data/growth.xlsx', sheet="rwl")

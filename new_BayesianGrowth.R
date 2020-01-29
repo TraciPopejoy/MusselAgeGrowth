@@ -10,7 +10,6 @@ hist(rgamma(1000,1,1)) #variance on mu_l
 hist(rgamma(1500,.001,.001),breaks=1300,xlim=c(0,1)) #variance on tauk
 hist(rgamma(1000,.01,.01),breaks=800,xlim=c(0,1)) #variance on tau_t0
 
-
 # Von Bertanlanffy's model
 # L = Lmax*(1-exp(-K*(Age-t0)))
 
@@ -48,7 +47,7 @@ tau_k ~ dgamma(.0001,.0001)
 mu_t0 ~ dnorm (0, .1)
 tau_t0 ~ dgamma(.0001,.0001)
 }"
-
+v<-c("mu_l","mu_k","mu_t0")
 
 #getting a vector of sites so my factor levels line up
 Lsites<- AxL %>% ungroup() %>%
@@ -58,7 +57,7 @@ Lsites<- AxL %>% ungroup() %>%
 
 #nrow(lamp.mcmc.data)  159984
 
-lamp.mcmc.data<-NULL #start the final mcmc data set
+lamp.mcmc.data<-rep(NA,nit) #start the final mcmc data set
 lamp.mcmc.sum<-NULL #start the final mcmc summary stats
 
 
@@ -96,7 +95,7 @@ for(s in 1:length(Lsites)) {
                        SiteID=Lsites[s],
                        x2.5=summary(mcmc)$quantiles[,1],
                        x25=summary(mcmc)$quantiles[,2],
-                       x50=summary(mcmc)$quantiles[,3]) 
+                       x50=summary(mcmc)$quantiles[,3], 
                        x75=summary(mcmc)$quantiles[,4],
                        x97.5=summary(mcmc)$quantiles[,5])
   lamp.mcmc.sum<-rbind(lamp.mcmc.sum, mcmc.sum)
@@ -104,19 +103,28 @@ for(s in 1:length(Lsites)) {
   #save my mcmc chains for later use
   mcmc.data<-rbind(as.matrix(mcmc[1]),as.matrix(mcmc[2]),
                    as.matrix(mcmc[3]))
-  mcmc.data <- as.data.frame(mcmc.data) %>% mutate(Site.Agg=s)
-  lamp.mcmc.data<-rbind(lamp.mcmc.data, mcmc.data)
+  names(v)<-c(paste("mu_l",s, sep="_"),
+                 paste("mu_k",s, sep="_"),
+                 paste("mu_t0",s, sep="_"))
+  mcmc.data <- as.data.frame(mcmc.data) %>% 
+    dplyr::rename(all_of(v))
+  lamp.mcmc.data<-cbind(lamp.mcmc.data, mcmc.data)
   #print the mcmc diagnostics to check
   pdf(paste(paste('mcmc_output/LampMcmcDiag_Lmax',s, sep="_"),'.pdf',sep=""))
-  diagMCMC(mcmc)
+  plot(mcmc)
+  gelman.plot(mcmc)
   dev.off()
 }
 
-
-
+names(lamp.mcmc.data)
+library(bayesplot)
+mcmc_intervals(lamp.mcmc.data, regex_pars = "mu_l") +
+  coord_flip()
 head(lamp.mcmc.sum)
-ggplot(data=lamp.mcmc.sum)+
-  geom_crossbar(aes(x=Latitude,y=x50,ymin=x2.5, ymax=x97.5))+
+lamp.lmax.graph<-lamp.mcmc.sum %>% left_join(SiteID)
+ggplot(data=lamp.lmax.graph)+
+  geom_crossbar(aes(x=Latitude,y=x50,ymin=x2.5, ymax=x97.5), linetype="dashed")+
+  geom_crossbar(aes(x=Latitude,y=x50,ymin=x25, ymax=x75))+
   geom_point(aes(x=Latitude, y=mean),size=2)+
   facet_wrap(~variable, scales="free_y")+
   geom_smooth(aes(x=Latitude, y=mean),method="lm", se=F)+
