@@ -1,5 +1,7 @@
 library(readxl);library(dplR);library(ggplot2); library(tidyverse)
-SiteID<-read_excel('data/!GrowthRawData.xlsx', sheet="Location")
+SiteID<-read_excel('data/!GrowthRawData.xlsx', sheet="Location") %>%
+  group_by(Site.Agg) %>%
+  mutate(Lat.cor=mean(Latitude))
 
 # pull in adjusted, final crossdated shell growth annuli
 apfiles1<-paste("data/apli_raw/physxd_fin/",

@@ -2,22 +2,22 @@
 set.seed(6363) #set random number seed for replicable analysis
 
 ### testing priors 
-hist(runif(1000, 10,200)) # prior on Lmax
-hist(runif(1000,0,1)) # prior on K
-hist(rnorm(1000, 0,.1)) # prior on T0
-hist(rgamma(1000,.1,.1)) #variance on L
-hist(rgamma(1000,1,1)) #variance on mu_l
-hist(rgamma(1500,.001,.001),breaks=1300,xlim=c(0,1)) #variance on tauk
-hist(rgamma(1000,.01,.01),breaks=800,xlim=c(0,1)) #variance on tau_t0
+#hist(runif(1000, 10,200)) # prior on Lmax
+#hist(runif(1000,0,1)) # prior on K
+#hist(rnorm(1000, 0,.1)) # prior on T0
+#hist(rgamma(1000,.1,.1)) #variance on L
+#hist(rgamma(1000,1,1)) #variance on mu_l
+#hist(rgamma(1500,.001,.001),breaks=1300,xlim=c(0,1)) #variance on tauk
+#hist(rgamma(1000,.01,.01),breaks=800,xlim=c(0,1)) #variance on tau_t0
 
 # Von Bertanlanffy's model
 # L = Lmax*(1-exp(-K*(Age-t0)))
 
 library(rjags);library(MCMCpack)
 
-nadapt=2500
-burnin=5000
-nit=30000
+nadapt=3000
+burnin=8000
+nit=35000
 thin=3
 
 ##### Model Code #####
@@ -55,11 +55,9 @@ Lsites<- AxL %>% ungroup() %>%
   filter(Species %in% c("LCAR","LORN")) %>%
   pull(Site.Agg) %>% unique()
 
-#nrow(lamp.mcmc.data)  159984
-
-lamp.mcmc.data<-rep(NA,nit) #start the final mcmc data set
+lamp.mcmc.data<-rep(NA,nit-2) #start the final mcmc data set
 lamp.mcmc.sum<-NULL #start the final mcmc summary stats
-
+lamp.gr<-NULL
 
 #loop through each site, pull data, run model, save mcmc
 for(s in 1:length(Lsites)) {
@@ -110,6 +108,9 @@ for(s in 1:length(Lsites)) {
     dplyr::rename(all_of(v))
   lamp.mcmc.data<-cbind(lamp.mcmc.data, mcmc.data)
   #print the mcmc diagnostics to check
+  gr<-cbind(gelman.diag(mcmc)[[1]],gelman.diag(mcmc)[[2]], Lsites[s])
+  lamp.gr<-rbind(lamp.gr, gr)
+  
   pdf(paste(paste('mcmc_output/LampMcmcDiag_Lmax',s, sep="_"),'.pdf',sep=""))
   plot(mcmc)
   gelman.plot(mcmc)
@@ -118,7 +119,7 @@ for(s in 1:length(Lsites)) {
 
 names(lamp.mcmc.data)
 library(bayesplot)
-mcmc_intervals(lamp.mcmc.data, regex_pars = "mu_l") +
+mcmc_intervals(lamp.mcmc.data[,-1], regex_pars = "mu_l") +
   coord_flip()
 head(lamp.mcmc.sum)
 lamp.lmax.graph<-lamp.mcmc.sum %>% left_join(SiteID)
@@ -131,7 +132,8 @@ ggplot(data=lamp.lmax.graph)+
   theme_bw()
 
 write.csv(lamp.mcmc.data, "Lamp_Lmax_mcmcres.csv")
-
+write.csv(lamp.mcmc.sum, "Lamp_Lmax_mcmc_sum.csv")
+View(lamp.gr)
 
 # Amblema -------
 #getting a vector of sites so my factor levels line up
@@ -140,10 +142,9 @@ Asites<- AxL %>% ungroup() %>%
   filter(Species=="APLI") %>%
   pull(Site.Agg) %>% unique()
 
-#nrow(lamp.mcmc.data)  159984
-
-amb.mcmc.data<-NULL #start the final mcmc data set
+amb.mcmc.data<-rep(NA,nit-2) #start the final mcmc data set
 amb.mcmc.sum<-NULL #start the final mcmc summary stats
+amb.gr<-NULL
 
 
 #loop through each site, pull data, run model, save mcmc
@@ -180,23 +181,32 @@ for(s in 1:length(Asites)) {
                        SiteID=Asites[s],
                        x2.5=summary(mcmc)$quantiles[,1],
                        x97.5=summary(mcmc)$quantiles[,5],
-                       x50=summary(mcmc)$quantiles[,3]) %>%
-    left_join(SiteID)
+                       x50=summary(mcmc)$quantiles[,3]) 
   amb.mcmc.sum<-rbind(amb.mcmc.sum, mcmc.sum)
   
   #save my mcmc chains for later use
   mcmc.data<-rbind(as.matrix(mcmc[1]),as.matrix(mcmc[2]),
                    as.matrix(mcmc[3]))
-  mcmc.data <- as.data.frame(mcmc.data) %>% mutate(Site.Agg=s)
-  amb.mcmc.data<-rbind(amb.mcmc.data, mcmc.data)
+  names(v)<-c(paste("mu_l",s, sep="_"),
+              paste("mu_k",s, sep="_"),
+              paste("mu_t0",s, sep="_"))
+  mcmc.data <- as.data.frame(mcmc.data) %>% 
+    dplyr::rename(all_of(v))
+  amb.mcmc.data<-cbind(amb.mcmc.data, mcmc.data)
   #print the mcmc diagnostics to check
+  #print the mcmc diagnostics to check
+  gr<-cbind(gelman.diag(mcmc)[[1]],gelman.diag(mcmc)[[2]], Asites[s])
+  amb.gr<-rbind(amb.gr, gr)
+  
   pdf(paste(paste('mcmc_output/AMBMcmcDiag_Lmax',s, sep="_"),'.pdf',sep=""))
   plot(mcmc)
   gelman.plot(mcmc)
   dev.off()
 }
-
-mcmc_intervals(mcmc.data, pars=c("mu_l","muk","mu_t0"))+
-  facet_wrap(~Site.Agg)
-
+names(amb.mcmc.data)
+mcmc_intervals(amb.mcmc.data[,-1], regex_pars = "mu_l")+
+  scale_y_discrete(labels=Asites, name="Sites")+
+  coord_flip()
 write.csv(amb.mcmc.data, "Amb_Lmax_mcmcres.csv")
+write.csv(amb.mcmc.sum, "Amb_Lmax_mcmc_sum.csv")
+View(amb.gr)
