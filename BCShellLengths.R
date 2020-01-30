@@ -69,21 +69,3 @@ AxL %>% filter(Age.unadj-Age < 0) %>% slice(1)
 AxL %>% dplyr::select(Species, Site, id,Year, L, Length, age) %>%
   mutate(dif.Length=Length-L) %>%
   slice(n()) %>% arrange(desc(dif.Length))
-
-dataL<-AxL %>% ungroup() %>%
-  left_join(SiteID, by=c('Site'='SiteID')) %>%
-  filter(Species %in% c("LCAR","LORN"))%>%
-  mutate(SiteF=as.factor(Site.Agg),
-         idF=as.factor(id)) %>%
-  dplyr::select(SiteF,idF,Age,L, Latitude)
-which(is.na(dataL)) #needs to be integer(0)
-
-dataA<-AxL %>% ungroup() %>%
-  left_join(SiteID, by=c('Site'='SiteID')) %>%
-  filter(Species=="APLI")%>%
-  mutate(SiteF=as.factor(Site.Agg),
-         idF=as.factor(id)) %>%
-  dplyr::select(SiteF,idF,Age,L, Latitude)
-which(is.na(dataA)) #needs to be integer(0)
-
-
