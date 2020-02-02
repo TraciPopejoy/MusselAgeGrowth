@@ -17,7 +17,7 @@ library(rjags);library(MCMCpack)
 
 nadapt=3000
 burnin=8000
-nit=40000
+nit=45000
 thin=3
 
 ##### Model Code #####
@@ -55,7 +55,7 @@ Lsites<- AxL %>% ungroup() %>%
   filter(Species %in% c("LCAR","LORN")) %>%
   pull(Site.Agg) %>% unique()
 
-lamp.mcmc.data<-rep(NA,nit-1) #start the final mcmc data set
+lamp.mcmc.data<-rep(NA,nit) #start the final mcmc data set
 lamp.mcmc.sum<-NULL #start the final mcmc summary stats
 lamp.gr<-NULL
 
@@ -142,7 +142,7 @@ Asites<- AxL %>% ungroup() %>%
   filter(Species=="APLI") %>%
   pull(Site.Agg) %>% unique()
 
-amb.mcmc.data<-rep(NA,nit-2) #start the final mcmc data set
+amb.mcmc.data<-rep(NA,nit) #start the final mcmc data set
 amb.mcmc.sum<-NULL #start the final mcmc summary stats
 amb.gr<-NULL
 
@@ -212,8 +212,9 @@ write.csv(amb.mcmc.sum, "Amb_Lmax_mcmc_sum.csv")
 View(amb.gr)
 
 
-# plot
+# plots ------
 color_scheme<-color_scheme_get("blue")
+#lampsilis
 lamp.lmax.graph1<-mcmc_intervals_data(lamp.mcmc.data[,-1], regex_pars = "mu_l") %>%
   mutate(Site.Agg=Lsites[as.numeric(substr(parameter,6,7))]) %>%
   left_join(SiteID[,c(2,14)]) %>%
@@ -226,10 +227,39 @@ llmax.con<-ggplot(lamp.lmax.graph1) +
   geom_point(aes(x = m, y = Lat.cor), size = 4, shape= 21,
              color=color_scheme[[6]],fill=color_scheme[[1]])+
   scale_y_continuous(name="Latitude")+
-  scale_x_continuous(name="Lmax")+
-  geom_abline(intercept=0,slope=.37)+
-  theme_classic()+coord_flip()
+  scale_x_continuous(name="Maximum Length (mm)")+
+  geom_abline(intercept=0,slope=.3597)+
+  theme_classic()+coord_flip()+
+  theme(axis.title.x = element_text(size=0))
 llmax.dis<-ggplot(lamp.lmax.graph1) +
+  geom_segment(aes(x = ll, xend = hh, y = SiteLat, yend=SiteLat),
+               color=color_scheme[[3]])+  #outer line
+  geom_segment(aes(x = l, xend = h, y = SiteLat, yend = SiteLat),
+               size = 2, color=color_scheme[[5]])+ #inner line
+  geom_point(aes(x = m, y = SiteLat), size = 4, shape= 21,
+             color=color_scheme[[6]],fill=color_scheme[[1]])+
+  scale_x_continuous(name="Maximum Length (mm)")+
+  scale_y_discrete(name="Sites")+
+  theme_classic()+coord_flip()+
+  theme(axis.text.x = element_text(angle = 40, hjust=.9),
+        axis.title.y = element_text(size=0))
+#amblema
+amb.lmax.graph1<-mcmc_intervals_data(amb.mcmc.data[,-1], regex_pars = "mu_l") %>%
+  mutate(Site.Agg=Asites[as.numeric(substr(parameter,6,7))]) %>%
+  left_join(SiteID[,c(2,14)]) %>%
+  mutate(SiteLat=fct_reorder(Site.Agg,Lat.cor))
+almax.con<-ggplot(amb.lmax.graph1) +
+  geom_segment(aes(x = ll, xend = hh, y = Lat.cor, yend=Lat.cor),
+               color=color_scheme[[3]])+  #outer line
+  geom_segment(aes(x = l, xend = h, y = Lat.cor, yend = Lat.cor),
+               size = 2, color=color_scheme[[5]])+ #inner line
+  geom_point(aes(x = m, y = Lat.cor), size = 4, shape= 21,
+             color=color_scheme[[6]],fill=color_scheme[[1]])+
+  scale_y_continuous(name="Latitude")+
+  scale_x_continuous(name="Maximum Length (mm)")+
+  geom_abline(intercept=0,slope=.3186)+
+  theme_classic()+coord_flip()
+almax.dis<-ggplot(amb.lmax.graph1) +
   geom_segment(aes(x = ll, xend = hh, y = SiteLat, yend=SiteLat),
                color=color_scheme[[3]])+  #outer line
   geom_segment(aes(x = l, xend = h, y = SiteLat, yend = SiteLat),
@@ -241,3 +271,9 @@ llmax.dis<-ggplot(lamp.lmax.graph1) +
   theme_classic()+coord_flip()+
   theme(axis.text.x = element_text(angle = 40, hjust=.9))
 
+library(cowplot)
+plot_grid(llmax.con, almax.con, ncol=1, labels="AUTO")
+ggsave("figures/LmaxContinuous.tiff")
+
+plot_grid(llmax.dis, almax.dis, ncol=1, labels="AUTO")
+ggsave("figures/LmaxDiscrete.tiff")

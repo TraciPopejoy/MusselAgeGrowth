@@ -42,7 +42,6 @@ lmax.long<-lamp.mcmc.sum %>%
 hist(rnorm(1000,0,5)) # prior on beta
 hist(rgamma(1000,0.01, 0.01), breaks=800, xlim=c(0,2)) #precision on Lat
 
-
 beta_model_string<- "model {
 # likelihood
 for (i in 1:nobs){ 
@@ -91,7 +90,6 @@ dev.off()
 gelman.diag(beta.mcmc[,-3])[[1]]
 
 summary(beta.mcmc)
-library(bayesplot)
 color_scheme_set("blue")
 mcmc_areas(beta.mcmc, regex_pars = c("invbeta"))+
   scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
@@ -108,9 +106,9 @@ difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta")+
   scale_y_discrete(labels="Lampsilis spp.")+
   theme(axis.text.y = element_text(color="white"))
 
-library(cowplot)
-plot_grid(beta.plot,difbeta.plot, ncol=1, labels="AUTO")
-ggsave("Figure3.tiff", width=3.3, height=4)
+plot_grid(beta.plot,difbeta.plot, ncol=1, labels="AUTO",
+          rel_heights = c(1,.6))
+ggsave("figures/Figure3.tiff", width=3.3, height=4)
 
 
 beta.mcmc.data<-as.matrix(beta.mcmc)
