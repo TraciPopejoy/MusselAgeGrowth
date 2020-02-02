@@ -48,7 +48,7 @@ get_dis_stats<- function(data,site,gage, maxyear, shellyear, gageyear) {
   return(calc_allHITOut)
 }
 
-get_dis_stats(site="test",gage="05341550",maxyear=2017,shellyear=1986,gageyear=2011)
+#get_dis_stats(site="test",gage="05341550",maxyear=2017,shellyear=1986,gageyear=2011)
 
 site.dis<-NULL
 for(r in c(1:3,5:14,16:29:31:40)){
@@ -70,19 +70,31 @@ Site.data[30,] #haven't investigated yet
 # figure out stream characteristics -----
 library(nhdplusTools); library(sf)
 
-start_point <- st_sfc(st_point(c(Site.data$Long.cor[1], 
-                                 Site.data$Lat.cor[1])), crs = 4269)
-start_comid <- discover_nhdplus_id(start_point)
+nhdata.all<-NULL
+for(s in 1:nrow(Site.data)){
+  start_point <- st_sfc(st_point(c(Site.data$Long.cor[s], 
+                                   Site.data$Lat.cor[s])), crs = 4269)
+  start_comid <- discover_nhdplus_id(start_point)
+  
+  subset_file <- tempfile(fileext = ".gpkg")
+  subset <- subset_nhdplus(comids = start_comid,
+                           output_file = subset_file,
+                           nhdplus_data = "download", 
+                           return_data = TRUE)
+  
+  nhdata <- subset$NHDFlowline_Network %>% cbind(Site.Agg=Site.data$Site.Agg[s])
+  print(Site.data$Site.Agg[s])
+  nhdata.all<-rbind(nhdata.all, nhdata)
+}
 
-subset_file <- tempfile(fileext = ".gpkg")
-subset <- subset_nhdplus(comids = start_comid,
-                         output_file = subset_file,
-                         nhdplus_data = "download", 
-                         return_data = TRUE)
+site.schar<- as.data.frame(nhdata.all) %>%
+  mutate(ppt.cm=ppt0001/10,
+         elev=minelevsmo/100,
+         logDA=log(totdasqkm)) %>%
+  dplyr::select(Site.Agg, gnis_name, totdasqkm,logDA, lengthkm, streamorde,
+                elev, slope,q0001e,v0001e, 
+                temp0001, ppt.cm) 
 
-nhdata <- subset$NHDFlowline_Network
-catchment <- subset$CatchmentSP
-waterbody <- subset$NHDWaterbody 
 #figuring out stream temperatur
 
 dailyT.all<-NULL
@@ -136,12 +148,28 @@ site.landuse %>% group_by(Site.Agg) %>%
   arrange(sumF)
 site.forest<-site.landuse %>% 
   dplyr::filter(NLCD.2011.Land.Cover.Class %in%
-                unique(NLCD.2011.Land.Cover.Class)[c(5,7,14)]) %>%
-  mutate(Prop=Freq*100)
+                c("Deciduous Forest","Evergreen Forest","Mixed Forest")) %>%
+  mutate(Prop=Freq*100) %>%
+  group_by(Site.Agg) %>%
+  summarize(Fprop100=sum(Prop))
+site.urban<-site.landuse %>% 
+  dplyr::filter(NLCD.2011.Land.Cover.Class %in%
+                c("Developed, High Intensity","Developed, Low Intensity",
+                  "Developed, Medium Intensity","Developed, Open Space")) %>%
+  mutate(Prop=Freq*100) %>%
+  group_by(Site.Agg) %>%
+  summarize(Uprop100=sum(Prop))
 
 # combine into site x environment table -----
-
 # apply multiple regression to estimate a & b for temp regression
+# a = 0.055*logDA - 0.004BaseFlow - 0.047*ln(elev) - 0.001(prec.cm) + 0.002Forest +0.993
+# b = -0.62*logDA - 0.24T + 0.15HOF - 0.06Urban + 0.04Forest +9.8
+site.env<-left_join(site.schar, site.forest)%>%
+  left_join(site.urban) %>% #left_join(site.dis) %>%
+  replace(is.na(.),0) %>%
+  mutate(BaseFlow=runif(40,0,100),
+         a = 0.055*logDA - 0.004*BaseFlow - 0.047*log(elev) - 0.001*ppt.cm + 0.002*Fprop100 +0.993,
+         b = -0.62*logDA - 0.24*temp0001 - 0.06*Uprop100 + 0.04*Fprop100 + 9.8)
 
 # pull met data down
 Site.data.met<-Site.data %>%
@@ -211,9 +239,30 @@ dev.off()
 
 # apply regression to calculate water temperature
 
+w.sum<-weather %>% 
+  group_by(HUC.8, datatype, Date.r) %>%
+  summarize(meanval=mean(value)) %>%
+  spread(datatype,meanval) %>%
+  right_join(Site.data) %>%
+  left_join(site.env) %>%
+  mutate(year=year(Date.r),
+         wtavg=a*TAVG+b,
+         wtmax=a*TMAX+b,
+         wtmin=a*TMIN+b) %>%
+  dplyr::select(Site.Agg,Species,HUC.8,year,TAVG,wtavg, TMAX,wtmax,TMIN,wtmin, minYear, maxYear) 
+#don't have all the years, need to investigate
+  w.sum %>%
+    group_by(Site.Agg, Species) %>%
+    filter(year >= minYear) %>%
+    summarize(maxwyear=max(year),
+              minwyear=min(year),
+              minYear=mean(minYear))
+  summarize()
+
 # calculate summary statistics for water temperature
 
-#
+site.env.all<-site.env %>%
+# 
 
 
 
