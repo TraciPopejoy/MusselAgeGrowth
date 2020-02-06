@@ -24,8 +24,7 @@ env.model.data<-Site.data %>% ungroup() %>%
          summerHflow=mean(c(mh5,mh6,mh7,mh8)))
 
 em.data<-env.model.data %>% ungroup() %>%
-  dplyr::select(x50,Lat.cor,streamorde) 
-                Xwtavg, Xwtmax)
+  dplyr::select(x50,SpF,Lat.cor,streamorde, Xwtavg, Xwtmax,
                 ma2, fl1,fh1,dl16,dl17,ra8,summerLflow,summerHflow)
 
 em.data<-as.data.frame(em.data)
@@ -33,13 +32,21 @@ em.data<-as.data.frame(em.data)
 cor.test(y=em.data$x50, x=em.data$Lat.cor)
 correlationBF(y = em.data$x50, x = em.data$Lat.cor)
 
-bf1 <- regressionBF(x50 ~ ., data = em.data)
-length(bf)
-bf['Lat.cor']
-head(bf, n=6)
-tail(bf, n=4)
+bf.Lat <- regressionBF(x50 ~ Lat.cor, data = em.data)
+bf.Sp <- regressionBF(x50 ~ SpF, data = em.data)
+bf.streamorde <- regressionBF(x50 ~ streamorde, data = em.data)
+bf.Xwtavg <- regressionBF(x50 ~ Xwtavg, data = em.data)
+bf.Xwtmax <- regressionBF(x50 ~ Xwtmax, data = em.data)
+bf.summerLflow <- regressionBF(x50 ~ summerLflow, data = em.data)
+bf.summerHflow <- regressionBF(x50 ~ summerHflow, data = em.data)
+
+bf.all<-c(bf.Lat,bf.Sp,bf.streamorde,bf.Xwtavg,bf.Xwtmax,
+          bf.summerLflow, bf.summerHflow)
+length(bf.all)
+bf.all['Lat.cor']
+head(bf.all)
 ## Compare the 5 best models to the best
-bf2 = head(bf) / max(bf)
+bf2 = head(bf.all) / max(bf.all)
 bf2
 plot(bf2)
 
