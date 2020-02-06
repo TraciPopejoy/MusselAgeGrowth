@@ -14,11 +14,10 @@ Site.data<-AxL %>% group_by(Species, Site) %>%
   mutate(d.av.begin=min(whatNWISdata(siteNumber=USGS.Gage, parameterCd="00060", service="dv")$begin_date),
          prob.year=minYear-year(d.av.begin)) %>%
   arrange(prob.year)
-whatNWISdata(siteNumber="05586100", parameterCd="00060", service="dv")
+#whatNWISdata(siteNumber="05586100", parameterCd="00060", service="dv")
 
 #use Eflow to pull out some hydrological variables -----
-water.stats<-NULL
-get_dis_stats<- function(data,site,gage, maxyear, shellyear, gageyear) {
+get_dis_stats<- function(site,species, gage, maxyear, shellyear, gageyear, hit_var) {
   dailyQ<-readNWISdata(siteNumber=gage,
                       parameterCd="00060",
                       startDate=paste(max(shellyear, gageyear+1),"10-01", sep="-"),
@@ -43,30 +42,66 @@ get_dis_stats<- function(data,site,gage, maxyear, shellyear, gageyear) {
   calc_allHITOut <- calc_allHIT(dailyQClean,
                              drainArea=drainageArea,
                               floodThreshold=floodThresh) %>%
-  filter(indice %in% c("ml17")) %>%
-  mutate(Site.Agg=site)
+  filter(indice %in% hit_var) %>%
+  mutate(Site.Agg=site,
+         Sp=species)
   return(calc_allHITOut)
 }
 
-#get_dis_stats(site="test",gage="05341550",maxyear=2017,shellyear=1986,gageyear=2011)
-
 site.dis<-NULL
-for(r in c(1:3,5:14,16:29:31:40)){
+for(r in c(1:3,5:14,16:30,32:40)){
   dis.t<-get_dis_stats(site=Site.data$Site.Agg[r],
+                       species=Site.data$Species[r],
                        gage=Site.data$USGS.Gage[r],
                        maxyear=Site.data$maxYear[r],
                        shellyear=Site.data$minYear[r],
-                       gageyear=year(Site.data$d.av.begin[r])) 
+                       gageyear=year(Site.data$d.av.begin[r]),
+                       hit_var=c("ma2","ma3","ma36","ml16", "ml19",
+                                 "ml5","ml6","ml7","ml8",
+                                 "mh5","mh6","mh7","mh8",
+                                 "fl1","fh1","dl16","dl17",
+                                 "ra8","ra9")) 
   site.dis<-bind_rows(site.dis, dis.t)
 }
 
+#warnings due to: outdated function notation and discharge = 0 (its replaced with 0.1)
+
 #problem gages with missing data;
 #will manipulate data and get HIT values
-#might do chunks of years and then average
-Site.data[4,] #doesn't work because gage problem in 1991 
-Site.data[15,] #missing 1/24/2017 womp womp
-Site.data[30,] #haven't investigated yet
-  
+Site.data[4,] #doesn't work because gage problem in 1991; removed 1991, recalculated 
+Site.data[15,] #missing 1/24/2017 womp womp; didn't include 2017
+Site.data[31,] #needed a full year of data; included 2014 in data
+
+hit_var1<-c("ma2","ma3","ma36","ml16", "ml19","ml5","ml6","ml7","ml8",
+          "mh5","mh6","mh7","mh8","fl1","fh1","dl16","dl17","ra8","ra9")
+
+dis.FC.post91<-get_dis_stats(site=Site.data$Site.Agg[4], species=Site.data$Species[4],
+                             gage=Site.data$USGS.Gage[4],
+                     maxyear=Site.data$maxYear[4], shellyear=1991,
+                     gageyear=year(Site.data$d.av.begin[4]), hit_var = hit_var1) 
+dis.FC.pre91<-get_dis_stats(site=Site.data$Site.Agg[4], species=Site.data$Species[4],
+                            gage=Site.data$USGS.Gage[4],
+                             maxyear=1990, shellyear=Site.data$minYear[4],
+                             gageyear=year(Site.data$d.av.begin[4]), hit_var = hit_var1)
+dis.FC<-bind_rows(dis.FC.post91, dis.FC.pre91) %>%
+  group_by(indice, Site.Agg,Sp) %>% summarize(statistic=mean(statistic))
+dis.Flor.no17<-get_dis_stats(site=Site.data$Site.Agg[15], species=Site.data$Species[15],
+                             gage=Site.data$USGS.Gage[15],
+                            maxyear=2016, shellyear=Site.data$minYear[15],
+                            gageyear=year(Site.data$d.av.begin[15]), hit_var = hit_var1) 
+
+dis.W2.add2014<-get_dis_stats(site=Site.data$Site.Agg[31], species=Site.data$Species[31],
+                              gage=Site.data$USGS.Gage[31],
+                            maxyear=Site.data$maxYear[31], shellyear=2014,
+                            gageyear=year(Site.data$d.av.begin[31]), hit_var = hit_var1) 
+site.dis.com<-bind_rows(site.dis,dis.FC, dis.Flor.no17, dis.W2.add2014)
+
+site.hyd<-site.dis.com %>%
+  group_by(Site.Agg,Sp) %>%
+  pivot_wider(names_from=indice, values_from=statistic)
+
+write.csv(site.hyd, "data/HITDischarge.csv")
+
 # figure out stream characteristics -----
 library(nhdplusTools); library(sf)
 
@@ -95,22 +130,7 @@ site.schar<- as.data.frame(nhdata.all) %>%
                 elev, slope,q0001e,v0001e, 
                 temp0001, ppt.cm) 
 
-#figuring out stream temperatur
-
-dailyT.all<-NULL
-for(k in 1:40){
-dailyT <- readNWISdata(siteNumber=Site.data$USGS.Gage[k], service="dv",
-                parameterCd="00010",
-                startDate=paste(Site.data$minYear-1,"10-01", sep="-")[k],
-                endDate=paste(Site.data$maxYear,"09-30", sep="-")[k]) %>%
-  mutate(Site.Agg=Site.data$Site.Agg[k],
-         Species=Site.data$Species[k])
-dailyT.all<-bind_rows(dailyT.all, dailyT)
-}
-
-dailyT.all %>% group_by(site_no, Site.Agg, Species) %>%
-  summarize(meanT=mean(X_00010_00003, na.rm=T),
-            nobs=n())
+write.csv(site.schar, 'data/SiteChar.csv')
 
 # land use data ====
 #tutorial: https://mbjoseph.github.io/posts/2018-12-27-categorical-spatial-data-extraction-around-buffered-points-in-r/
@@ -128,6 +148,7 @@ for(m in 1:28){
   
   #download land cover data; takes a while (~30s per tile)
   buff_site<-buffer(Sp.Site.data, width=100)
+  
   nlcd_raster <- get_nlcd(buff_site,
                           label=paste(Sp.Site.data$Site.Agg),
                           dataset="landcover")
@@ -143,7 +164,7 @@ for(m in 1:28){
 site.landuse <- landprop.sum %>%
   mutate(ID=as.numeric(landcover)) %>%
   left_join(nlcd_raster@data@attributes[[1]][,c(1,8)]) 
-site.landuse %>% group_by(Site.Agg) %>% 
+site.landuse %>% group_by(Site.Agg) %>% #checking it sums to one
   summarize(sumF=sum(Freq)) %>%
   arrange(sumF)
 site.forest<-site.landuse %>% 
@@ -159,17 +180,30 @@ site.urban<-site.landuse %>%
   mutate(Prop=Freq*100) %>%
   group_by(Site.Agg) %>%
   summarize(Uprop100=sum(Prop))
+site.ag<-site.landuse %>% 
+  dplyr::filter(NLCD.2011.Land.Cover.Class %in%
+                  c("Hay/Pasture","Cultivated Crops")) %>%
+  mutate(Prop=Freq*100) %>%
+  group_by(Site.Agg, NLCD.2011.Land.Cover.Class) %>%
+  summarize(Prop100=sum(Prop)) %>% group_by(Site.Agg) %>%
+  pivot_wider(names_from = NLCD.2011.Land.Cover.Class,
+              values_from = Prop100)
+
+site.imp.landuse<-left_join(site.forest, site.urban) %>%
+  left_join(site.ag)
+write.csv(site.imp.landuse, 'data/LanduseT.csv')
 
 # combine into site x environment table -----
 # apply multiple regression to estimate a & b for temp regression
 # a = 0.055*logDA - 0.004BaseFlow - 0.047*ln(elev) - 0.001(prec.cm) + 0.002Forest +0.993
 # b = -0.62*logDA - 0.24T + 0.15HOF - 0.06Urban + 0.04Forest +9.8
-site.env<-left_join(site.schar, site.forest)%>%
-  left_join(site.urban) %>% #left_join(site.dis) %>%
+site.env<-left_join(site.schar, site.forest, by='Site.Agg') %>%
+  left_join(site.urban, by='Site.Agg') %>%
   replace(is.na(.),0) %>%
-  mutate(BaseFlow=runif(40,0,100),
-         a = 0.055*logDA - 0.004*BaseFlow - 0.047*log(elev) - 0.001*ppt.cm + 0.002*Fprop100 +0.993,
-         b = -0.62*logDA - 0.24*temp0001 - 0.06*Uprop100 + 0.04*Fprop100 + 9.8)
+  full_join(site.hyd, by='Site.Agg') %>%
+  mutate(a = 0.055*logDA - 0.004*ml19 - 0.047*log(elev) - 0.001*ppt.cm + 0.002*Fprop100 +0.993,
+         b = -0.62*logDA - 0.24*temp0001 - 0.06*Uprop100 + 0.04*Fprop100 + 9.8) %>%
+  filter(!duplicated(.))
 
 # pull met data down
 Site.data.met<-Site.data %>%
@@ -193,7 +227,7 @@ for(u in 1:14){
   for(l in ly:2){
       out <- ncdc(datasetid='GSOY', 
                   locationid=paste('HUC:', Site.data.met$HUC.8[u], sep=""), 
-                  datatypeid=c('TAVG','TMAX','TMIN'), 
+                  datatypeid=c('TAVG','TMAX','TMIN','HDSD','CDSD'), 
                   startdate =paste(y.span[l]),
                   enddate=paste(y.span[l-1]),
                   limit=1000)
@@ -206,9 +240,6 @@ for(u in 1:14){
                                       ".csv", sep = ""), sep=""))
   
 }
-#problem childs: 03160107
-which(is.na(match(Site.data.met$HUC.8,weather$HUC.8)))
-Site.data.met[1,]
 
 wfiles<-paste("data/weather/",
                list.files(path="data/weather/"), sep="")
@@ -219,8 +250,33 @@ for (i in 1:length(wfiles)){
            Date.r=as.Date(date))
   weather<-rbind(weather, ws)
 } 
-pdf('weathercheck.pdf')
-ggplot(weather[weather$datatype=="TAVG",], aes(x=Date.r,y=value))+
+
+#problem childs: 03160107;12100202
+Site.data.met[which(is.na(match(unique(Site.data.met$HUC.8),
+                                unique(weather$HUC.8)))),1:7]
+weath.W2<-ncdc(datasetid='GSOY', locationid='HUC:031601', 
+               datatypeid=c('TAVG','TMAX','TMIN','HDSD','CDSD'), 
+               startdate='2014-01-01', enddate='2016-01-01',
+               limit=1000)
+weath.W2$data<-weath.W2$data %>% mutate(HUC.8="03160107", Date.r=as.Date(date))
+weath.DW1<-ncdc(datasetid='GSOY', locationid='HUC:12100202', 
+               datatypeid=c('TAVG','TMAX','TMIN','HDSD','CDSD'), 
+               startdate='2006-01-01', enddate='2016-01-01',
+               limit=1000)
+weath.DW2<-ncdc(datasetid='GSOY', locationid='HUC:12100202', 
+                datatypeid=c('TAVG','TMAX','TMIN','HDSD','CDSD'), 
+                startdate='2004-01-01', enddate='2005-01-01',
+                limit=1000)
+weath.DW<-bind_rows(weath.DW1, weath.DW2) %>%
+  mutate(HUC.8="12100202", Date.r=as.Date(date))
+site.airT<-bind_rows(weather, weath.DW,weath.W2) %>%
+  dplyr::select(date, datatype, station, value, HUC.8, Date.r) %>%
+  filter(!is.na(datatype))
+
+write.csv(site.airT, 'data/weather/weatherAll.csv')
+
+pdf('data/weather/weathercheck.pdf')
+ggplot(site.airT[site.airT$datatype=="TAVG",], aes(x=Date.r,y=value))+
     geom_point()+
     scale_x_date(date_labels="%y")+
     theme(axis.text.x = element_text(angle=30))+
@@ -239,8 +295,14 @@ dev.off()
 
 # apply regression to calculate water temperature
 
-w.sum<-weather %>% 
+site.airT %>% 
+  group_by(datatype, Date.r) %>%
+  filter(datatype=="TMIN") %>%
+  summarize(mean(value))
+
+w.sum<-site.airT %>% 
   group_by(HUC.8, datatype, Date.r) %>%
+  filter(value>0) %>%
   summarize(meanval=mean(value)) %>%
   spread(datatype,meanval) %>%
   right_join(Site.data) %>%
@@ -250,21 +312,54 @@ w.sum<-weather %>%
          wtmax=a*TMAX+b,
          wtmin=a*TMIN+b) %>%
   dplyr::select(Site.Agg,Species,HUC.8,year,
-                TAVG,wtavg, TMAX,wtmax,TMIN,wtmin, minYear, maxYear) 
-#don't have all the years, need to investigate
-  w.sum %>%
-    group_by(Site.Agg, Species) %>%
-    filter(year >= minYear) %>%
-    summarize(maxwyear=max(year),
-              minwyear=min(year),
-              minYear=mean(minYear))
-  summarize()
+                TAVG,wtavg, TMAX,wtmax,TMIN,wtmin, minYear, maxYear) %>%
+  group_by(Site.Agg, Species) %>%
+  summarize(Xwtavg=mean(wtavg, na.rm=T),
+            Xwtmax=mean(wtmax, na.rm=T),
+            Xwtmin=mean(wtmin, na.rm=T),
+            maxy=max(year),
+            miny=min(year),
+            nobs=n(),
+            minYear=mean(minYear),
+            maxYear=mean(maxYear))
 
-# calculate summary statistics for water temperature
+write.csv(w.sum, 'data/weatherSum.csv')
 
-site.env.all<-site.env %>%
-# 
+# see how well it predicted based on usgs gages 
+#pull stream temperature from usgs gages
+  
+dailyT.all<-NULL
+for(k in 1:40){
+  dailyT <- readNWISdata(siteNumber=Site.data$USGS.Gage[k], service="dv",
+                         parameterCd="00010",
+                         startDate=paste(Site.data$minYear-1,"10-01", sep="-")[k],
+                         endDate=paste(Site.data$maxYear,"09-30", sep="-")[k]) %>%
+    mutate(Site.Agg=Site.data$Site.Agg[k],
+           Species=Site.data$Species[k])
+  dailyT.all<-bind_rows(dailyT.all, dailyT)
+}
+  
+dailyT.all %>% group_by(site_no, Site.Agg) %>%
+  summarize(meanT=mean(X_00010_00003, na.rm=T),
+            nobs=n())
 
+airTemp<-site.airT %>% filter(datatype=="TAVG") %>% 
+  mutate(year=year(Date.r)) %>%
+  group_by(HUC.8, year) %>%
+  summarize(mAT=mean(value, na.rm=T)) %>%
+  left_join(Site.data) %>%  left_join(site.env) %>% 
+  dplyr::select(Site.Agg,HUC.8,year,mAT,a,b)
+checkTReg<-dailyT.all %>% left_join(Site.data) %>%
+  dplyr::select(Site.Agg, HUC.8,dateTime, X_00010_00003) %>%
+  rename(ActWT=X_00010_00003) %>% 
+  mutate(year=year(dateTime)) %>%
+  group_by(HUC.8, year) %>%
+  summarize(myWT=mean(ActWT, na.rm=T)) %>%
+  left_join(airTemp) %>% 
+  mutate(wtavg=a*mAT+b)%>%
+  filter(!is.na(wtavg))
+  
+head(checkTReg)
+summary(lm(wtavg~myWT, data=checkTReg))
 
-
-
+# look at the nutrient data available in USGS ---

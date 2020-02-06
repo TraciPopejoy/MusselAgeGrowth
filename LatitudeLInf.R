@@ -32,8 +32,12 @@ lmax.long<-lamp.mcmc.sum %>%
   rename(Site.Agg=SiteID) %>%
   left_join(SiteID) %>%
   filter(variable=="mu_l")%>%
+  group_by(Sp) %>%
+  mutate(mu_l_z=scale(x50),
+         Latscale=scale(Lat.cor)) %>%
+  ungroup() %>%
   mutate(SpF=factor(Sp)) %>%
-  dplyr::select(SpF,Site.Agg, x50, Lat.cor) %>%
+  dplyr::select(SpF,Site.Agg, x50, Lat.cor, mu_l_z, Latscale) %>%
   filter(!duplicated(.))
 #fire emblem harry potter vs. got (politics)
 #rimworld - like stardew valley
@@ -46,18 +50,22 @@ beta_model_string<- "model {
 # likelihood
 for (i in 1:nobs){ 
 Latitude[i] ~ dnorm(lat[i],tau) 
-lat[i] <- beta[SpF[i]]*mu_l[i]
+lat[i] <- beta[SpF[i]]*mu_l[i]#+alpha[SpF[i]]
 }
 # priors
 tau ~ dgamma(0.01, 0.01) #variance on Lat
 for(s in 1:2){
 beta[s] ~ dnorm(mu_b, tau_b)
+#alpha[s] ~ dnorm(mu_a, tau_a)
 }
 #hyper priors
 mu_b ~ dnorm(0,5)
 tau_b ~ dgamma(.01,.01)
+#mu_a ~ dunif(-100,100)
+#tau_a ~ dgamma(.01,.01)
 #transformation
 invbeta<-1/beta
+#true.int<- -invbeta*alpha
 difbeta<-invbeta[1]-invbeta[2]
 }"
 
@@ -69,7 +77,7 @@ beta.model<-jags.model(textConnection(beta_model_string),
                               SpF=lmax.long$SpF,
                               nobs=40),
                     inits=list(beta=c(.5,.5)),
-                    n.chains=3, n.adapt=1000)
+                    n.chains=3, n.adapt=2000)
 #testing using mcmc chains
 #beta.model<-jags.model(textConnection(beta_model_string), 
 #                       data=list(mu_l = mcmc.chains$x50,
@@ -78,10 +86,11 @@ beta.model<-jags.model(textConnection(beta_model_string),
 #                                 nobs=54285),
 #                       inits=list(beta=c(.5,.5)),
 #                       n.chains=3, n.adapt=1000)
-update(beta.model, 2000) # burn in for 2000 samples
+update(beta.model, 3000) # burn in for 2000 samples
 beta.mcmc<-coda.samples(beta.model,
-                    variable.names=c("beta","invbeta","difbeta"), 
-                    n.iter=10000, thin=3)
+                    variable.names=c(#"alpha","true.int",
+                                     "beta","invbeta","difbeta"), 
+                    n.iter=50000, thin=4)
 pdf('betaMCMCdiag.pdf')
 plot(beta.mcmc)
 gelman.plot(beta.mcmc)
@@ -90,17 +99,42 @@ dev.off()
 gelman.diag(beta.mcmc[,-3])[[1]]
 
 summary(beta.mcmc)
+library(bayesplot)
 color_scheme_set("blue")
-mcmc_areas(beta.mcmc, regex_pars = c("invbeta"))+
+
+#mcmc_intervals(beta.mcmc, regex_pars=c('alpha'))+ 
+#  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
+#  theme_classic()
+#mcmc_intervals(beta.mcmc, regex_pars=c('true.int'))+
+#  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
+#  theme_classic()
+mcmc_intervals(beta.mcmc, pars=c('beta[1]', 'beta[2]'))+
+  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
+  theme_classic()
+mcmc_intervals(beta.mcmc, regex_pars=c('invbeta'))+ 
+  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
+  theme_classic()
+mcmc_intervals(beta.mcmc, pars=c('difbeta'))+ 
+  theme_classic()
+
+#mcmc_areas(beta.mcmc, regex_pars = c("invbeta"))+
+#  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
+#  theme_classic()
+
+mcmc_intervals(beta.mcmc, pars = c("beta[1]", "beta[2]"))+
+  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))
+
+alpha.plot<-mcmc_intervals(beta.mcmc, regex_pars=c('true.int'))+
   scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
   theme_classic()
 
 beta.plot<-mcmc_intervals(beta.mcmc, regex_pars = c("invbeta"))+
   scale_y_discrete(labels=c("A. plicata","Lampsilis spp.","Difference"))+
   theme_classic()+
-  xlab("Lmax = Beta*Latitude")
+  xlab("Lmax = Beta*Latitude+alpha")
 
-difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta")+
+difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta",
+                             prob_outer = .95)+
   theme_classic()+
   xlab("Difference in Beta")+
   scale_y_discrete(labels="Lampsilis spp.")+
@@ -110,10 +144,8 @@ plot_grid(beta.plot,difbeta.plot, ncol=1, labels="AUTO",
           rel_heights = c(1,.6))
 ggsave("figures/Figure3.tiff", width=3.3, height=4)
 
-
 beta.mcmc.data<-as.matrix(beta.mcmc)
-beta.cum<-ecdf(beta.mcmc.data[,3])
+beta.cum<-ecdf(beta.mcmc.data[,"difbeta"])
 summary(beta.cum)
 1-beta.cum(0)
-
 
