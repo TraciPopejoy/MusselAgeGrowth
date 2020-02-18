@@ -114,8 +114,6 @@ mcmc_intervals(beta.mcmc, pars=c('beta[1]', 'beta[2]'))+
 mcmc_intervals(beta.mcmc, regex_pars=c('invbeta'))+ 
   scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
   theme_classic()
-mcmc_intervals(beta.mcmc, pars=c('difbeta'))+ 
-  theme_classic()
 
 #mcmc_areas(beta.mcmc, regex_pars = c("invbeta"))+
 #  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
@@ -133,10 +131,9 @@ beta.plot<-mcmc_intervals(beta.mcmc, regex_pars = c("invbeta"))+
   theme_classic()+
   xlab("Lmax = Beta*Latitude+alpha")
 
-difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta",
-                             prob_outer = .95)+
+difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta")+
   theme_classic()+
-  xlab("Difference in Beta")+
+  scale_x_continuous("Difference in Beta")+
   scale_y_discrete(labels="Lampsilis spp.")+
   theme(axis.text.y = element_text(color="white"))
 
@@ -148,4 +145,3 @@ beta.mcmc.data<-as.matrix(beta.mcmc)
 beta.cum<-ecdf(beta.mcmc.data[,"difbeta"])
 summary(beta.cum)
 1-beta.cum(0)
-

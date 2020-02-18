@@ -1,4 +1,8 @@
 library(readxl);library(dplR);library(ggplot2); library(tidyverse)
+#load in data
+rw<-read_excel('data/growth.xlsx', sheet="rwl")
+SlideData<-read_excel('data/growth.xlsx', sheet="SlideData")
+ShellDim<-read_excel('data/!GrowthRawData.xlsx', sheet="SampleLengths")
 SiteID<-read_excel('data/!GrowthRawData.xlsx', sheet="Location") %>%
   group_by(Site.Agg) %>%
   mutate(Lat.cor=mean(Latitude),
