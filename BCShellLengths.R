@@ -56,7 +56,8 @@ reg<-ShellDim %>% bind_rows(anchor) %>%
   filter(!is.na(Length),!is.na(Width),
          Species %in% c("LORN","LCAR","APLI","QVER"))%>%
   summarize(Ha=lm(Length~Width)$coefficients[1],
-         Hb=lm(Length~Width)$coefficients[2])
+         Hb=lm(Length~Width)$coefficients[2],
+         R2=summary(lm(Length~Width))$adj.r.squared*100)
 
 # apply regression to build age x length table
 AxL<-AxW %>% 
@@ -74,3 +75,28 @@ AxL %>% filter(Age.unadj-Age < 0) %>% slice(1)
 AxL %>% dplyr::select(Species, Site, id,Year, L, Length, age) %>%
   mutate(dif.Length=Length-L) %>%
   slice(n()) %>% arrange(desc(dif.Length))
+
+
+## Table 1 ------
+is_spline<-read_xlsx("data/SplineResults.xlsx", sheet="FINAL") %>%
+  rename(Site.Agg=Population)
+head(is_spline)
+tb1<-AxL %>% ungroup() %>%
+  left_join(SiteID, by=c('Site'='SiteID')) %>%
+  dplyr::select(-Site) %>%
+  filter(!duplicated(.))%>%
+  group_by(Site.Agg, Species, Lat.cor, Long.cor) %>% 
+  summarize(shells=length(unique(id)),
+            rings=n(),
+            maxAge=max(age),
+            minAge=min(age)) %>%
+  left_join(reg) %>%
+  left_join(is_spline)
+write.csv(tb1, "figures/table1shell.csv")
+min(tb1$R2, na.rm=T)
+
+ss_mat<-AxL %>% left_join(SiteID, by=c('Site'='SiteID')) %>%
+  group_by(River) %>% arrange(desc(Lat.cor)) %>%
+  summarize(Sitesss=paste(unique(Site.Agg), collapse = ', '),
+            Spss=paste(unique(Species), collapse = ', '))
+write.csv(ss_mat, "figures/table1sites.csv")
