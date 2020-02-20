@@ -100,7 +100,7 @@ gelman.diag(beta.mcmc[,-3])[[1]]
 
 summary(beta.mcmc)
 library(bayesplot)
-color_scheme_set("blue")
+color_scheme_set("gray")
 
 #mcmc_intervals(beta.mcmc, regex_pars=c('alpha'))+ 
 #  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
@@ -129,19 +129,21 @@ alpha.plot<-mcmc_intervals(beta.mcmc, regex_pars=c('true.int'))+
 beta.plot<-mcmc_intervals(beta.mcmc, regex_pars = c("invbeta"))+
   scale_y_discrete(labels=c("A. plicata","Lampsilis spp.","Difference"))+
   theme_classic()+
-  xlab("Lmax = Beta*Latitude+alpha")
+  ggtitle("Lmax = inv.beta * Latitude")+
+  xlab("inv.beta")
 
 difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta")+
   theme_classic()+
-  scale_x_continuous("Difference in Beta")+
+  scale_x_continuous("Difference in inv.beta")+
   scale_y_discrete(labels="Lampsilis spp.")+
   theme(axis.text.y = element_text(color="white"))
 
 plot_grid(beta.plot,difbeta.plot, ncol=1, labels="AUTO",
-          rel_heights = c(1,.6))
-ggsave("figures/Figure3.tiff", width=3.3, height=4)
+          rel_heights= c(1,.7))
+ggsave("figures/Figure3.tiff", width=3.3, height=3)
 
 beta.mcmc.data<-as.matrix(beta.mcmc)
 beta.cum<-ecdf(beta.mcmc.data[,"difbeta"])
 summary(beta.cum)
 1-beta.cum(0)
+

@@ -28,16 +28,69 @@ em.data<-env.model.data %>% ungroup() %>%
          Lat.round=round(Lat.cor, 2))%>%
   dplyr::select(-SpF, -Lat.cor, -mu_l_z, -HUC.8,-gnis_name,-miny,-maxy,
                 -Site.Agg, -Long.cor,-totdasqkm, -lengthkm,-nobs, -Latscale,
-                -temp0001, -Xwtmax, -Xwtmin,-elev)
+                -temp0001, -Xwtmin, -ra9)
 
-bf.allsing<-generalTestBF(x50~.*SpN, data=em.data, 
+bf.allsing<-generalTestBF(x50~., data=em.data, whichRandom = "SpN",
                           whichModels = 'bottom')
-    
+
 head(bf.allsing)
 tail(bf.allsing)
 
-ds<-head(bf.allsing, n=10)/bf.allsing["SpN"]
+ds<-head(bf.allsing, n=15)/bf.allsing["SpN"]
 plot(ds)
+head(ds)
+tail(bf.allsing)/bf.allsing["SpN"]
+
+
+BF.plotdata<-extractBF(ds) %>% 
+  rownames_to_column() %>% 
+  dplyr::select(rowname, bf, error) %>%
+  mutate(Variable=fct_reorder(rowname, bf),
+         VType=case_when(rowname %in% c("Xwtavg","Xwtmax")~'Temperature',
+                         rowname %in% c("Lat.round", "ppt.cm",
+                                        "streamorde","logDA","elev")~'Characteristics',
+                         rowname %in% c("ra8","ml16","ml19","mh5","mh6","summerHflow","q0001e",
+                                        "ml6","mh7","fl1","mh8","ma2")~'Flow',
+                         rowname %in% c("Uprop100")~'Land Cover'),
+         BFH0SpN=bf-1)
+
+ggplot()+
+  geom_col(data=BF.plotdata[BF.plotdata$rowname!="SpN",], 
+           aes(x=Variable, y=BFH0SpN, fill=VType))+
+  geom_vline(xintercept=c(13.5,12.5,9.5,6.5), size=1.4)+
+  annotate(geom="text",y=c(4,4,27,27),
+            x=c(14,13,10,7),
+            label=c("Very Strong Evidence",
+                    "Strong Evidence",
+                    "Moderate Evidence",
+                    "Anecdotal Evidence"),
+           color=c("white","white","black","black"))+
+  scale_y_continuous(trans="log1p", 
+                     breaks=c(-.5,0,1,3,10,30,60),
+                     name=expression(paste('Bayes Factor'~~H[0]:L[max]%~%Species)))+
+  scale_fill_grey(name="Variable Type")+
+  theme_classic()+
+  theme(legend.position = c(.8,.175))+
+  coord_flip()
+  
+ggplot(data=env.model.data)+
+  geom_point( aes(x=ppt.cm, y=x50, fill=SpF, shape=SpF),
+              color="black", size=2)+
+  scale_fill_manual(name="Species",values=c("black","white"))+
+  scale_shape_manual(name="Species",values=c(21,24))+
+  theme_classic()+
+  theme(legend.position = c(.9,.9))
+
+
+lat<-ggplot(data=env.model.data)+
+  geom_point(aes(x=ppt.cm, y=Lat.cor), color="red",size=2)+
+  theme_classic()
+long<-ggplot(data=env.model.data)+
+  geom_point(aes(x=ppt.cm, y=Long.cor), color="blue",size=2)+
+  theme_classic()
+library(cowplot)
+plot_grid(lat,long)
+
 
 # Model comparison ------------
 bf<-generalTestBF(x50~., data=em.data,

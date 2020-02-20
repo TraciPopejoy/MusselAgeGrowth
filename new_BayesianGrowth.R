@@ -212,6 +212,10 @@ write.csv(amb.mcmc.sum, "Amb_Lmax_mcmc_sum.csv")
 View(amb.gr)
 
 
+#amb.mcmc.data<-read.csv("Amb_Lmax_mcmcres.csv") %>% 
+#  dplyr::select(-X)
+#lamp.mcmc.data<-read.csv("Lamp_Lmax_mcmcres.csv") %>% 
+#  dplyr::select(-X)
 # plots ------
 color_scheme<-color_scheme_get("blue")
 #lampsilis
@@ -303,6 +307,36 @@ lmax.dis<-ggplot(lmax.graph) +
 lmax.dis
 plot_grid(plot_grid(llmax.con, almax.con, ncol=1, 
                     labels=c("A","B")),
-          lmax.con, nrow=1, labels=c("","C"),
-          rel_widths = c(.6,.9), align="h")
-ggsave('figures/lmaxbio3.tiff', width=9, height=6)
+          lmax.dis, nrow=1, labels=c("","C"),
+          rel_widths = c(.6,1.1))
+ggsave('figures/lmaxbio3.tiff', width=9, height=5)
+
+# results numbers ------
+amb.mcmc.sum %>% filter(variable=="mu_l") %>% summarise(mean(x50), min(x50), max(x50))
+amb.mcmc.sum %>% filter(variable=="mu_k") %>% summarise(mean(x50), min(x50), max(x50))
+amb.mcmc.sum %>% filter(variable=="mu_t0") %>% summarise(mean(x50), min(x50), max(x50))
+
+lamp.mcmc.sum %>% filter(variable=="mu_l") %>% summarise(mean(x50), min(x50), max(x50))
+lamp.mcmc.sum %>% filter(variable=="mu_k") %>% summarise(mean(x50), min(x50), max(x50))
+lamp.mcmc.sum %>% filter(variable=="mu_t0") %>% summarise(mean(x50), min(x50), max(x50))
+
+# compare between sites with both species
+ggplot(lmax.graph[lmax.graph$Site.Agg %in% c("K2","KT","K4","KS","K7",
+                                             "MS1","Upstream","Sylvan",
+                                             "STF","Hudson",
+                                             "Barry","Wendel3","MusselMania","Wendel2"),]) +
+  geom_linerange(aes(ymin = ll, ymax = hh, x = SiteLat,
+                     group=Species), position=position_dodge(.75))+  #outer line
+  geom_linerange(aes(ymin = l, ymax = h, x = SiteLat, group=Species),
+                 size = 2,position=position_dodge(.75))+ #inner line
+  geom_point(aes(x = SiteLat, y = m, fill=Species, group=Species), 
+             size = 3, shape= 21, 
+             position=position_dodge(.75))+
+  #geom_text(aes(x = SiteLat, y = 60, label=seq(1:40), group=Species),
+  #          position=position_dodge(.75), size=3)+
+  scale_y_continuous(name="Maximum Length (mm)")+
+  scale_x_discrete(name="Sites")+
+  scale_fill_manual(values=c("white","darkgrey"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 40, hjust=.9),
+        legend.position = 'top')

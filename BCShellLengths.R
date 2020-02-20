@@ -93,7 +93,8 @@ tb1<-AxL %>% ungroup() %>%
   left_join(reg) %>%
   left_join(is_spline)
 write.csv(tb1, "figures/table1shell.csv")
-min(tb1$R2, na.rm=T)
+min(tb1$R2, na.rm=T) #adj r
+min(tb1$Cor, na.rm=T); max(tb1$Cor, na.rm=T) #interseries correlation range
 
 ss_mat<-AxL %>% left_join(SiteID, by=c('Site'='SiteID')) %>%
   group_by(River) %>% arrange(desc(Lat.cor)) %>%

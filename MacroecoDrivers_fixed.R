@@ -10,7 +10,7 @@ Site.data<-AxL %>% group_by(Species, Site) %>%
   left_join(SiteID, by="SiteID") %>%
   dplyr::select(Species,Site.Agg, HUC.8,HUC.12,USGS.Gage, maxYear, minYear, Lat.cor, Long.cor) %>%
   filter(!duplicated(Lat.cor))%>%
-  rowwise() %>%
+  ungroup() %>%
   mutate(d.av.begin=min(whatNWISdata(siteNumber=USGS.Gage, parameterCd="00060", service="dv")$begin_date),
          prob.year=minYear-year(d.av.begin)) %>%
   arrange(prob.year)
@@ -60,7 +60,7 @@ for(r in c(1:3,5:14,16:30,32:40)){
                        hit_var=c("ma2","ma3","ma36","ml16", "ml19",
                                  "ml5","ml6","ml7","ml8",
                                  "mh5","mh6","mh7","mh8",
-                                 "fl1","fh1","dl16","dh17",
+                                 "fl1","fh1","dl16","dh15",
                                  "ra8","ra9")) 
   site.dis<-bind_rows(site.dis, dis.t)
 }
@@ -74,7 +74,7 @@ Site.data[15,] #missing 1/24/2017 womp womp; didn't include 2017
 Site.data[31,] #needed a full year of data; included 2014 in data
 
 hit_var1<-c("ma2","ma3","ma36","ml16", "ml19","ml5","ml6","ml7","ml8",
-          "mh5","mh6","mh7","mh8","fl1","fh1","dl16","dh17","ra8","ra9")
+          "mh5","mh6","mh7","mh8","fl1","fh1","dl16","dh15","ra8","ra9")
 
 dis.FC.post91<-get_dis_stats(site=Site.data$Site.Agg[4], species=Site.data$Species[4],
                              gage=Site.data$USGS.Gage[4],
@@ -199,7 +199,7 @@ write.csv(site.imp.landuse, 'data/LanduseT.csv')
 # a = 0.055*logDA - 0.004BaseFlow - 0.047*ln(elev) - 0.001(prec.cm) + 0.002Forest +0.993
 # b = -0.62*logDA - 0.24T + 0.15HOF - 0.06Urban + 0.04Forest +9.8
 
-site.env<-left_join(site.schar, site.forest, by='Site.Agg') %>%
+site.env<-left_join(site.schar, site.imp.landuse, by='Site.Agg') %>%
   left_join(site.urban, by='Site.Agg') %>%
   replace(is.na(.),0) %>%
   full_join(site.hyd, by='Site.Agg') %>%
@@ -348,19 +348,46 @@ airTemp<-site.airT %>% filter(datatype=="TAVG") %>%
   mutate(year=year(Date.r)) %>%
   group_by(HUC.8, year) %>%
   summarize(mAT=mean(value, na.rm=T)) %>%
-  left_join(Site.data) %>%  left_join(site.env) %>% 
-  dplyr::select(Site.Agg,HUC.8,year,mAT,a,b)
-checkTReg<-dailyT.all %>% left_join(Site.data) %>%
+  ungroup()%>%
+  left_join(Site.data[,-1], by="HUC.8") %>%  
+  left_join(site.env[!duplicated(site.env[,c(1)]),c(1,37,38)]) %>% 
+  dplyr::select(Site.Agg,HUC.8,year,mAT,a,b) %>%
+  filter(!duplicated(.))
+checkTReg<-dailyT.all %>% left_join(Site.data[,-1]) %>%
   dplyr::select(Site.Agg, HUC.8,dateTime, X_00010_00003) %>%
+  ungroup() %>%
   rename(ActWT=X_00010_00003) %>% 
   mutate(year=year(dateTime)) %>%
   group_by(HUC.8, year) %>%
   summarize(myWT=mean(ActWT, na.rm=T)) %>%
   left_join(airTemp) %>% 
-  mutate(wtavg=a*mAT+b)%>%
+  mutate(wtavg=round((a*mAT+b),2))%>%
   filter(!is.na(wtavg))
+
   
-head(checkTReg)
-summary(lm(wtavg~myWT, data=checkTReg))
+which(duplicated(checkTReg))
+summary(lm(wtavg~myWT-1, data=checkTReg))
+cor.test(checkTReg$wtavg,checkTReg$myWT) #0.794
+length(unique(checkTReg$HUC.8));length(unique(checkTReg$year))
 
 # look at the nutrient data available in USGS ---
+head(Site.data)
+nuttest<-NULL
+for(n in 1:40){
+test<-readNWISqw(Site.data$USGS.Gage[n], 
+          "NUT", 
+          startDate = paste(Site.data$minYear[n], "-01-01", sep=""), 
+          endDate = paste(Site.data$maxYear[n], "-01-01", sep=""))
+if(nrow(test)==0){
+  test<-data.frame(site_no=Site.data$USGS.Gage[n], 
+          sample_dt=NA, parm_cd=NA, result_va=NA)
+  nuttest<-bind_rows(nuttest,test)
+}else{
+  test<-test %>% dplyr::select(site_no, sample_dt, parm_cd, result_va)
+  nuttest<-bind_rows(nuttest,test)
+}
+}
+
+View(nuttest %>% filter(is.na(result_va)) %>%
+       group_by(site_no) %>% tally() %>%
+  left_join(Site.data[,2:5], by=c("site_no"="USGS.Gage")))
