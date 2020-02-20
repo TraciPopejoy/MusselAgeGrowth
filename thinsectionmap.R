@@ -36,7 +36,7 @@ WS14<-rbind(WS13, TexasHUC8[grep("Neches",TexasHUC8$GNIS_NAME), -c(13:15)])
 WS15<-rbind(WS14, FrenchHUC8[FrenchHUC8$GNIS_NAME=="French Creek", -c(13:15)])
 
 
-bigR<-getFlowLines(c(-102.5,-71.8, 27,50), 7, filePath="7thOrderR")
+#bigR<-getFlowLines(c(-102.5,-71.8, 27,50), 7, filePath="7thOrderR")
 bigR<-readOGR(dsn="data/7thOrderR")
 
 TSsiteLocations<-SiteID 
@@ -151,13 +151,13 @@ tssites<-TSsiteLocations[TSsiteLocations$Site.Agg %in% c(Asites, Lsites),-c(1,3,
 tssites<-tssites[which(!duplicated(tssites@data)),]
 tidysites<-data.frame(tssites) 
 
-#usstreams<-broom::tidy(bigR)
+usstreams<-broom::tidy(bigR)
 library(ggplot2); library(ggrepel) 
 ggplot()+
   geom_polygon(data = states, aes(x = long, y = lat, group=group), 
                color="black",fill="white")+
-  #geom_path(data = usstreams, aes(x=long, y = lat, group = group), 
-  #          color="darkcyan", size=0.4) +
+  geom_path(data = usstreams, aes(x=long, y = lat, group = group), 
+            color="dark grey") +
   geom_path(data=txts, aes(x=long, y=lat, group=group, color=region),
             size=1.5)+
   geom_path(data=mobile, aes(x=long, y=lat, group=group, color=region),
@@ -174,13 +174,13 @@ ggplot()+
   scale_colour_manual(name="Biogeographic Province",
                       breaks=c("Upper Mississippi","St Lawrence-Great Lakes",
                                "Interior Highlands","Mobile Basin","Western Gulf"),
-                      values=wes_palette("Zissou1")[c(3,4,1,2,5)])+
+                      values=wes_palette("Darjeeling1"))+
   labs(x='Longitude', y='Latitude')+theme_minimal()+
   theme(legend.position ="bottom", 
         legend.box.background = element_rect(fill="white"))+
   guides(col = guide_legend(nrow = 2, title.position="top"))+
   coord_cartesian()
-ggsave('figures/map.tiff', width=5, height=5.8)
+ggsave('figures/mapFull.tiff', width=5, height=5.8)
 
 # pulling out the HUC12 to access weather data ----
 KiamichiHUC12<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/KiamichiShape", layer="WBDHU12")
