@@ -212,12 +212,12 @@ write.csv(amb.mcmc.sum, "Amb_Lmax_mcmc_sum.csv")
 View(amb.gr)
 
 
-#amb.mcmc.data<-read.csv("Amb_Lmax_mcmcres.csv") %>% 
-#  dplyr::select(-X)
-#lamp.mcmc.data<-read.csv("Lamp_Lmax_mcmcres.csv") %>% 
-#  dplyr::select(-X)
+amb.mcmc.data<-read.csv("Amb_Lmax_mcmcres.csv") %>% 
+  dplyr::select(-X)
+lamp.mcmc.data<-read.csv("Lamp_Lmax_mcmcres.csv") %>% 
+  dplyr::select(-X)
 # plots ------
-color_scheme<-color_scheme_get("blue")
+color_scheme<-color_scheme_get("gray")
 #lampsilis
 lamp.lmax.graph1<-mcmc_intervals_data(lamp.mcmc.data[,-1], regex_pars = "mu_l") %>%
   mutate(Site.Agg=Lsites[as.numeric(substr(parameter,6,7))]) %>%
@@ -253,7 +253,17 @@ amb.lmax.graph1<-mcmc_intervals_data(amb.mcmc.data[,-1], regex_pars = "mu_l") %>
   left_join(SiteID[,c(2,13)]) %>%
   filter(!duplicated(.)) %>%
   mutate(SiteLat=fct_reorder(Site.Agg,Lat.cor))
+amb.lmax.graph1$image <- "figures/amblemaP.png"
+library(ggimage)
+#abiorect<-data.frame(xmin=c(29.3,31.5,33.5),
+#                     xmax=c(31.5,33.5,37), 
+#                     ymin=rep(59,3), ymax=rep(62,3))
 almax.con<-ggplot(amb.lmax.graph1) +
+  #geom_rect(data=abiorect, aes(xmin=xmin,xmax=xmax,
+  #                               ymin=ymin,ymax=ymax), 
+  #          fill=wes_palette("Darjeeling1")[c(1,4,3)])+
+  #geom_image(aes(image = image), x=30.5, y=153, size=.15)+
+  #geom_text(y=145, x=31, label=expression(italic("A. plicata")))+
   geom_ribbon(aes(x=Lat.cor,ymin=2.95*Lat.cor, ymax=3.34*Lat.cor),
               fill="lightgrey", alpha=.5)+
   geom_linerange(aes(ymin = ll, ymax = hh, x = Lat.cor))+  #outer line
@@ -264,6 +274,8 @@ almax.con<-ggplot(amb.lmax.graph1) +
   scale_y_continuous(name="Maximum Length (mm)")+
   geom_abline(intercept=0,slope=3.135)+
   theme_classic()
+almax.con
+
 almax.dis<-ggplot(amb.lmax.graph1) +
   geom_segment(aes(x = ll, xend = hh, y = SiteLat, yend=SiteLat),
                color=color_scheme[[3]])+  #outer line
@@ -287,8 +299,13 @@ ggsave("figures/LmaxDiscrete.tiff", width=6.5, height=7)
 lmax.graph<-bind_rows(amb.lmax.graph1 %>% mutate(Species="A. plicata"),
           lamp.lmax.graph1 %>% mutate(Species="Lampsilis spp.")) %>%
   mutate(SiteLat=fct_reorder(Site.Agg,Lat.cor))
-
+bioregrect<-data.frame(xmin=c(0,2.5,6.5,12.5,24.5,22.5),
+                       xmax=c(2.5,6.5,12.5,28.5,25.5,23.5), 
+                       ymin=rep(59,6), ymax=rep(62,6))
 lmax.dis<-ggplot(lmax.graph) +
+  geom_rect(data=bioregrect, aes(xmin=xmin,xmax=xmax,
+                                 ymin=ymin,ymax=ymax), 
+            fill=wes_palette("Darjeeling1")[c(1,4,3,5,2,2)])+
   geom_linerange(aes(ymin = ll, ymax = hh, x = SiteLat,
                      group=Species), position=position_dodge(.75))+  #outer line
   geom_linerange(aes(ymin = l, ymax = h, x = SiteLat, group=Species),
@@ -296,13 +313,11 @@ lmax.dis<-ggplot(lmax.graph) +
   geom_point(aes(x = SiteLat, y = m, fill=Species, group=Species), 
              size = 3, shape= 21, 
              position=position_dodge(.75))+
-  #geom_text(aes(x = SiteLat, y = 60, label=seq(1:40), group=Species),
-  #          position=position_dodge(.75), size=3)+
   scale_y_continuous(name="Maximum Length (mm)")+
   scale_x_discrete(name="Sites")+
   scale_fill_manual(values=c("white","darkgrey"))+
   theme_classic()+
-  theme(axis.text.x = element_text(angle = 40, hjust=.9),
+  theme(axis.text.x = element_text(angle = 40, hjust=1),
         legend.position = 'top')
 lmax.dis
 plot_grid(plot_grid(llmax.con, almax.con, ncol=1, 
