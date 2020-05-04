@@ -29,121 +29,188 @@ lamp.mcmc.sum<-read.csv("Lamp_Lmax_mcmc_sum.csv")
 lmax.long<-lamp.mcmc.sum %>%
   mutate(Sp="LAMP") %>%
   bind_rows(amb.mcmc.sum %>% mutate(Sp="APLI"))%>%
-  rename(Site.Agg=SiteID) %>%
+  mutate(Site.Agg=recode(SiteID, 
+                       Wendel2="Wendell2", Wendel3="Wendell3")) %>%
+  select(-SiteID) %>%
   left_join(SiteID) %>%
   filter(variable=="mu_l")%>%
   group_by(Sp) %>%
-  mutate(mu_l_z=scale(x50),
-         Latscale=scale(Lat.cor)) %>%
+  mutate(mu_l_z=scale(x50, center=F),
+         Latscale=scale(Lat.cor, center=F),
+         precision=1/SD^2) %>%
   ungroup() %>%
-  mutate(SpF=factor(Sp)) %>%
-  dplyr::select(SpF,Site.Agg, x50, Lat.cor, mu_l_z, Latscale) %>%
+  mutate(SpF=factor(Sp), 
+         deltax50=case_when(SpF=="APLI"~x50/173*100,
+                            SpF=="LAMP"~x50/131*100))%>%
+  dplyr::select(SpF,Site.Agg, x50, Lat.cor, mu_l_z, 
+                Latscale, deltax50, precision)%>%
   filter(!duplicated(.))
-#fire emblem harry potter vs. got (politics)
-#rimworld - like stardew valley
+
+lhist<-lmax.long %>% 
+  dplyr::select(SpF, Lat.cor, x50, mu_l_z, deltax50) %>%
+  gather(variable, value, -SpF, -Lat.cor) 
+ggplot(lhist)+geom_histogram(aes(x=value))+
+  facet_wrap(~SpF+variable, scales="free")
+
+library(bayesboot)
+linereg<-function(d){
+  coef(lm(deltax50~Lat.cor-1, data=d))
+}
+
+a_linreg <- bayesboot(lmax.long %>% filter(SpF=="APLI"), linereg, R = 1000)
+plot(a_linreg)
+
+l_linreg <- bayesboot(lmax.long %>% filter(SpF=="LAMP"), linereg, R = 1000)
+plot(l_linreg)
+
+b_diff <- as.bayesboot(a_linreg - l_linreg)
+plot(b_diff)
+
+plot(bb_linreg)
+names(bb_linreg)<-c("APLI","LAMP")
+linereg_df<-as.data.frame(bb_linreg) %>% 
+  gather(SpF,value)
+sum_line<-data.frame(SpF=c("APLI","LAMP"),
+                     slope=c(0.0239, 0.0249))
+
+ggplot()+
+  geom_abline(data=linereg_df, alpha=0.03,
+              mapping=aes(slope=value, intercept=0))+
+  geom_abline(data=sum_line, 
+              mapping=aes(slope=slope, group=SpF, intercept=0), 
+              color="blue", size=2)+
+  geom_point(data=lmax.long, aes(x=Lat.cor, y=mu_l_z),
+             size=2.5)+
+  facet_wrap(~SpF)+theme_bw()+
+  labs(x="Latitude", y="Root-mean-squares normalized length")
+  
 
 ### testing priors 
-hist(rnorm(1000,0,5)) # prior on beta
-hist(rgamma(1000,0.01, 0.01), breaks=800, xlim=c(0,2)) #precision on Lat
+hist(rnorm(1000,0,10)) # prior on beta 
+hist(rnorm(1000,0,50)) # prior on alpha 
 
 beta_model_string<- "model {
 # likelihood
 for (i in 1:nobs){ 
 Latitude[i] ~ dnorm(lat[i],tau) 
-lat[i] <- beta[SpF[i]]*mu_l[i]#+alpha[SpF[i]]
+lat[i] <- beta[SpF[i]]*mu_l[i]
 }
 # priors
-tau ~ dgamma(0.01, 0.01) #variance on Lat
+tau <- dgamma(0.01, 0.01) #variance on Lat
 for(s in 1:2){
 beta[s] ~ dnorm(mu_b, tau_b)
-#alpha[s] ~ dnorm(mu_a, tau_a)
 }
+
 #hyper priors
-mu_b ~ dnorm(0,5)
+mu_b ~ dnorm(0,10)
 tau_b ~ dgamma(.01,.01)
-#mu_a ~ dunif(-100,100)
-#tau_a ~ dgamma(.01,.01)
+
 #transformation
-invbeta<-1/beta
-#true.int<- -invbeta*alpha
+invbeta<-1/(beta)
 difbeta<-invbeta[1]-invbeta[2]
 }"
 
-# Amblema x Latitude model ----------
+test_model_string<- "model {
+# likelihood
+for (i in 1:nobs){ 
+mu_l[i] ~ dnorm(mu_e[i],tau[i]) 
+mu_e[i] <- beta[SpF[i]]*Latitude[i] + alpha
+}
+# priors
+alpha ~ dnorm(0,50)T(-100,100)
+for(s in 1:2){
+beta[s] ~ dnorm(mu_b, tau_b)
+}
 
-beta.model<-jags.model(textConnection(beta_model_string), 
-                    data=list(mu_l = lmax.long$x50,
+#hyper priors
+mu_b ~ dnorm(0,10)
+tau_b ~ dgamma(.01,.01)
+
+#transformation
+difbeta<-beta[1]-beta[2]
+}"
+
+# Amblema x Latitude model ----------
+library(rjags)
+beta.model<-jags.model(textConnection(test_model_string), 
+                    data=list(mu_l = lmax.long$deltax50,
                               Latitude = lmax.long$Lat.cor,
                               SpF=lmax.long$SpF,
+                              tau=lmax.long$precision,
                               nobs=40),
-                    inits=list(beta=c(.5,.5)),
-                    n.chains=3, n.adapt=2000)
-#testing using mcmc chains
-#beta.model<-jags.model(textConnection(beta_model_string), 
-#                       data=list(mu_l = mcmc.chains$x50,
-#                                 Latitude = mcmc.chains$Lat.cor,
-#                                 SpF=mcmc.chains$SpF,
-#                                 nobs=54285),
-#                       inits=list(beta=c(.5,.5)),
-#                       n.chains=3, n.adapt=1000)
-update(beta.model, 3000) # burn in for 2000 samples
+                    n.chains=3, n.adapt=10000)
+update(beta.model, 30000) # burn in for 2000 samples
 beta.mcmc<-coda.samples(beta.model,
-                    variable.names=c(#"alpha","true.int",
-                                     "beta","invbeta","difbeta"), 
-                    n.iter=50000, thin=4)
+                    variable.names=c("beta","difbeta","alpha"), 
+                    n.iter=500000, thin=3)
 pdf('betaMCMCdiag.pdf')
 plot(beta.mcmc)
 gelman.plot(beta.mcmc)
 dev.off()
 
-gelman.diag(beta.mcmc[,-3])[[1]]
+gelman.diag(beta.mcmc)[[1]]
 
 summary(beta.mcmc)
 library(bayesplot)
 color_scheme_set("gray")
 
-#mcmc_intervals(beta.mcmc, regex_pars=c('alpha'))+ 
-#  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
-#  theme_classic()
-#mcmc_intervals(beta.mcmc, regex_pars=c('true.int'))+
-#  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
-#  theme_classic()
+mcmc_intervals(beta.mcmc, regex_pars=c('alpha'))+ 
+  theme_classic()
 mcmc_intervals(beta.mcmc, pars=c('beta[1]', 'beta[2]'))+
   scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
   theme_classic()
-mcmc_intervals(beta.mcmc, regex_pars=c('invbeta'))+ 
-  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
-  theme_classic()
 
-#mcmc_areas(beta.mcmc, regex_pars = c("invbeta"))+
-#  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
-#  theme_classic()
-
-mcmc_intervals(beta.mcmc, pars = c("beta[1]", "beta[2]"))+
-  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))
-
-alpha.plot<-mcmc_intervals(beta.mcmc, regex_pars=c('true.int'))+
-  scale_y_discrete(labels=c("A. plicata","Lampsilis spp."))+
-  theme_classic()
-
-beta.plot<-mcmc_intervals(beta.mcmc, regex_pars = c("invbeta"))+
-  scale_y_discrete(labels=c("A. plicata","Lampsilis spp.","Difference"))+
+beta.plot<-mcmc_intervals(beta.mcmc, pars = c("beta[1]", "beta[2]"))+
+  scale_y_discrete(labels=c(expression(italic("A. plicata")),
+                            expression(italic("Lampsilis spp."))))+
   theme_classic()+
-  ggtitle("Lmax = inv.beta * Latitude")+
-  xlab("inv.beta")
+  ggtitle("percent max. length = slope * Latitude")+
+  xlab(expression("% max. length"%.%"Latitude"^-1))
 
 difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta")+
   theme_classic()+
-  scale_x_continuous("Difference in inv.beta")+
+  ggtitle("Amblema slope - Lampsilis slope")+
   scale_y_discrete(labels="Lampsilis spp.")+
   theme(axis.text.y = element_text(color="white"))
 
 plot_grid(beta.plot,difbeta.plot, ncol=1, labels="AUTO",
           rel_heights= c(1,.7))
-ggsave("figures/Figure3.tiff", width=3.3, height=3)
+ggsave("figures/Figure4beta.tiff", width=5, height=5)
+
+summary(lmax.long[lmax.long$SpF=="APLI",]$x50);summary(lmax.long[lmax.long$SpF=="APLI",]$mu_l_z)
+summary(lmax.long[lmax.long$SpF=="LAMP",]$x50);summary(lmax.long[lmax.long$SpF=="LAMP",]$mu_l_z)
 
 beta.mcmc.data<-as.matrix(beta.mcmc)
 beta.cum<-ecdf(beta.mcmc.data[,"difbeta"])
 summary(beta.cum)
-1-beta.cum(0)
+beta.cum(0) #area under the curve <0
 
+
+#Appendix - bootstrapped linear model
+#from tutorial: https://www.statmethods.net/advstats/bootstrapping.html
+library(boot);library(broom)
+# function to obtain R-Squared from the data 
+coefff <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample 
+  fit <- lm(formula, data=d)
+  return(c(coef(fit),summary(fit)$r.square,
+                     glance(fit)$p.value))
+} 
+# bootstrapping with 1000 replications 
+results <- boot(data=lmax.long, statistic=coefff, 
+                R=1000, formula=deltax50~Lat.cor:SpF)
+
+# view results
+results 
+plot(results, index=1) #intercept
+plot(results, index=2) #amb slope
+plot(results, index=3) #lam slope
+plot(results, index=4) #rsquared
+plot(results, index=5) #pvalue
+
+# get 95% confidence interval 
+boot.ci(results, type="bca", index=1)
+boot.ci(results, type="bca", index=2)
+boot.ci(results, type="bca", index=3)
+boot.ci(results, type="bca", index=4)
+boot.ci(results, type="bca", index=5)
