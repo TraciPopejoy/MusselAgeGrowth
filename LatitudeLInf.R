@@ -52,44 +52,11 @@ lhist<-lmax.long %>%
 ggplot(lhist)+geom_histogram(aes(x=value))+
   facet_wrap(~SpF+variable, scales="free")
 
-library(bayesboot)
-linereg<-function(d){
-  coef(lm(deltax50~Lat.cor-1, data=d))
-}
-
-a_linreg <- bayesboot(lmax.long %>% filter(SpF=="APLI"), linereg, R = 1000)
-plot(a_linreg)
-
-l_linreg <- bayesboot(lmax.long %>% filter(SpF=="LAMP"), linereg, R = 1000)
-plot(l_linreg)
-
-b_diff <- as.bayesboot(a_linreg - l_linreg)
-plot(b_diff)
-
-plot(bb_linreg)
-names(bb_linreg)<-c("APLI","LAMP")
-linereg_df<-as.data.frame(bb_linreg) %>% 
-  gather(SpF,value)
-sum_line<-data.frame(SpF=c("APLI","LAMP"),
-                     slope=c(0.0239, 0.0249))
-
-ggplot()+
-  geom_abline(data=linereg_df, alpha=0.03,
-              mapping=aes(slope=value, intercept=0))+
-  geom_abline(data=sum_line, 
-              mapping=aes(slope=slope, group=SpF, intercept=0), 
-              color="blue", size=2)+
-  geom_point(data=lmax.long, aes(x=Lat.cor, y=mu_l_z),
-             size=2.5)+
-  facet_wrap(~SpF)+theme_bw()+
-  labs(x="Latitude", y="Root-mean-squares normalized length")
-  
-
 ### testing priors 
 hist(rnorm(1000,0,10)) # prior on beta 
 hist(rnorm(1000,0,50)) # prior on alpha 
 
-beta_model_string<- "model {
+old_model_string<- "model {
 # likelihood
 for (i in 1:nobs){ 
 Latitude[i] ~ dnorm(lat[i],tau) 
@@ -162,14 +129,14 @@ mcmc_intervals(beta.mcmc, pars=c('beta[1]', 'beta[2]'))+
 
 beta.plot<-mcmc_intervals(beta.mcmc, pars = c("beta[1]", "beta[2]"))+
   scale_y_discrete(labels=c(expression(italic("A. plicata")),
-                            expression(italic("Lampsilis spp."))))+
+                            expression(italic("Lampsilis ")*spp.)))+
   theme_classic()+
-  ggtitle("percent max. length = slope * Latitude")+
-  xlab(expression("% max. length"%.%"Latitude"^-1))
+  ggtitle("percent Max. Length = slope * Latitude + intercept")+
+  xlab(expression("% Max. Length"%.%"Latitude"^-1))
 
 difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta")+
   theme_classic()+
-  ggtitle("Amblema slope - Lampsilis slope")+
+  ggtitle(expression(italic("A. plicata")*" slope - "*italic("Lampsilis")*" spp. slope"))+
   scale_y_discrete(labels="Lampsilis spp.")+
   theme(axis.text.y = element_text(color="white"))
 

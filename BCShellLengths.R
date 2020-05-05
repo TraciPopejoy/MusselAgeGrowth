@@ -101,3 +101,41 @@ ss_mat<-AxL %>% left_join(SiteID, by=c('Site'='SiteID')) %>%
   summarize(Sitesss=paste(unique(Site.Agg), collapse = ', '),
             Spss=paste(unique(Species), collapse = ', '))
 write.csv(ss_mat, "figures/table1sites.csv")
+
+
+#plot for powerpoint
+head(AxL)
+AxL %>%  select(Site,id) %>%
+  slice(1) %>% group_by(Site) %>% tally() %>%
+  arrange(desc(n))
+
+AxLplotdf<-AxL %>% filter(Site=="Hudson")
+
+library(cowplot)
+alapli<-ggplot()+
+  stat_function(data=AxLplotdf[AxLplotdf$Species=="APLI",],
+                aes(x=Age, y=L),
+              fun=function(x) 148.6*(1-exp(-0.052*(x - 1.12))), 
+              size=2)+
+  geom_point(data=AxLplotdf[AxLplotdf$Species=="APLI",],
+             aes(x=Age, y=L), shape=0, alpha=.5)+
+  scale_y_continuous("")+
+  scale_x_continuous("", breaks=seq(0,30, by=5))+
+  ggtitle(expression(italic("Amblema plicata")))+
+  theme_cowplot()+
+  theme(plot.title = element_text(hjust=.5),
+        axis.title.y = element_text(size=0))
+allcar<-ggplot()+
+  stat_function(data=AxLplotdf[AxLplotdf$Species=="LCAR",],
+                aes(x=Age, y=L),
+                fun=function(x) 110.9*(1-exp(-.388*(x - .12))), 
+                size=2)+
+  geom_point(data=AxLplotdf[AxLplotdf$Species=="LCAR",],
+             aes(x=Age, y=L), shape=1, alpha=.5)+
+  scale_y_continuous("")+
+  scale_x_continuous("", breaks=seq(0,30, by=3))+
+  ggtitle(expression(italic("Lampsilis cardium")))+
+  theme_cowplot()+
+  theme(plot.title = element_text(hjust=.5),
+        axis.title.y = element_text(size=0))
+plot_grid(alapli, allcar)

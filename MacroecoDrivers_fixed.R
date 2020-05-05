@@ -10,7 +10,7 @@ Site.data<-AxL %>% group_by(Species, Site) %>%
   left_join(SiteID, by="SiteID") %>%
   dplyr::select(Species,Site.Agg, HUC.8,HUC.12,USGS.Gage, maxYear, minYear, Lat.cor, Long.cor) %>%
   filter(!duplicated(Lat.cor))%>%
-  ungroup() %>%
+  rowwise() %>%
   mutate(d.av.begin=min(whatNWISdata(siteNumber=USGS.Gage, parameterCd="00060", service="dv")$begin_date),
          prob.year=minYear-year(d.av.begin)) %>%
   arrange(prob.year)
@@ -50,7 +50,7 @@ get_dis_stats<- function(site,species, gage, maxyear, shellyear, gageyear, hit_v
 
 #get_dis_stats(site="test",gage="05341550",maxyear=2017,shellyear=1986,gageyear=2011)
 site.dis<-NULL
-for(r in c(1:3,5:14,16:30,32:40)){
+for(r in c(1:3,5:14,17:30,32:40)){
   dis.t<-get_dis_stats(site=Site.data$Site.Agg[r],
                        species=Site.data$Species[r],
                        gage=Site.data$USGS.Gage[r],
@@ -71,6 +71,7 @@ for(r in c(1:3,5:14,16:30,32:40)){
 #will manipulate data and get HIT values
 Site.data[4,] #doesn't work because gage problem in 1991; removed 1991, recalculated 
 Site.data[15,] #missing 1/24/2017 womp womp; didn't include 2017
+Site.data[16,] #missing one date in 2017; didn't include 2017
 Site.data[31,] #needed a full year of data; included 2014 in data
 
 hit_var1<-c("ma2","ma3","ma36","ml16", "ml19","ml5","ml6","ml7","ml8",
@@ -91,11 +92,16 @@ dis.Flor.no17<-get_dis_stats(site=Site.data$Site.Agg[15], species=Site.data$Spec
                             maxyear=2016, shellyear=Site.data$minYear[15],
                             gageyear=year(Site.data$d.av.begin[15]), hit_var = hit_var1) 
 
+dis.Kish<-get_dis_stats(site=Site.data$Site.Agg[16], species=Site.data$Species[16],
+              gage=Site.data$USGS.Gage[16],
+              maxyear=2016, shellyear=Site.data$minYear[16],
+              gageyear=year(Site.data$d.av.begin[16]), hit_var = hit_var1) 
+
 dis.W2.add2014<-get_dis_stats(site=Site.data$Site.Agg[31], species=Site.data$Species[31],
                               gage=Site.data$USGS.Gage[31],
                             maxyear=Site.data$maxYear[31], shellyear=2014,
                             gageyear=year(Site.data$d.av.begin[31]), hit_var = hit_var1) 
-site.dis.com<-bind_rows(site.dis,dis.FC, dis.Flor.no17, dis.W2.add2014)
+site.dis.com<-bind_rows(site.dis,dis.FC, dis.Flor.no17, dis.Kish, dis.W2.add2014)
 
 site.hyd<-site.dis.com %>%
   group_by(Site.Agg,Sp) %>%
@@ -106,6 +112,20 @@ write.csv(site.hyd, "data/HITDischarge.csv")
 # figure out stream characteristics -----
 library(nhdplusTools); library(sf)
 
+work_dir <- tempdir(check = TRUE)
+sample_data <- system.file("extdata/sample_natseamless.gpkg", package = "nhdplusTools")
+
+hr_gpkg <- file.path(work_dir, "hr_data.gpkg")
+
+
+hr_data_dir <- download_nhdplushr(work_dir, "1114")# Download some NHDPlusHR Data
+
+hr <- get_nhdplushr(hr_data_dir)
+sapply(hr, class)
+sapply(hr, nrow)
+str(hr)
+
+#MY CODE
 nhdata.all<-NULL
 for(s in 1:nrow(Site.data)){
   start_point <- st_sfc(st_point(c(Site.data$Long.cor[s], 
@@ -128,7 +148,7 @@ site.schar<- as.data.frame(nhdata.all) %>%
          elev=minelevsmo/100,
          logDA=log(totdasqkm)) %>%
   dplyr::select(Site.Agg, gnis_name, totdasqkm,logDA, lengthkm, streamorde,
-                elev, slope,q0001e,v0001e, 
+                elev, slope,q0001e,v0001e,
                 temp0001, ppt.cm) 
 
 write.csv(site.schar, 'data/SiteChar.csv')
@@ -191,7 +211,7 @@ site.ag<-site.landuse %>%
               values_from = Prop100)
 
 site.imp.landuse<-left_join(site.forest, site.urban) %>%
-  left_join(site.ag)
+  full_join(site.ag)
 write.csv(site.imp.landuse, 'data/LanduseT.csv')
 
 # combine into site x environment table -----
@@ -200,7 +220,6 @@ write.csv(site.imp.landuse, 'data/LanduseT.csv')
 # b = -0.62*logDA - 0.24T + 0.15HOF - 0.06Urban + 0.04Forest +9.8
 
 site.env<-left_join(site.schar, site.imp.landuse, by='Site.Agg') %>%
-  left_join(site.urban, by='Site.Agg') %>%
   replace(is.na(.),0) %>%
   full_join(site.hyd, by='Site.Agg') %>%
   mutate(a = 0.055*logDA - 0.004*ml19 - 0.047*log(elev) - 0.001*ppt.cm + 0.002*Fprop100 +0.993,
@@ -246,7 +265,7 @@ for(u in 1:14){
 wfiles<-paste("data/weather/",
                list.files(path="data/weather/"), sep="")
 weather<-NULL
-for (i in 1:length(wfiles)){
+for (i in 2:length(wfiles)){
   ws <- read.csv(wfiles[i]) %>% 
     mutate(HUC.8=substr(wfiles[i],14,21),
            Date.r=as.Date(date))
@@ -311,10 +330,13 @@ w.sum<-site.airT %>%
   mutate(year=year(Date.r),
          wtavg=a*TAVG+b,
          wtmax=a*TMAX+b,
-         wtmin=a*TMIN+b) %>%
-  dplyr::select(Site.Agg,Species,HUC.8,year,
+         wtmin=a*TMIN+b,
+         Sp=case_when(Species %in% c("LCAR","LORN")~"LAMP",
+                             Species =="APLI"~"APLI"),
+         SpF=factor(Sp)) %>%
+  dplyr::select(Site.Agg,SpF,HUC.8,year,
                 TAVG,wtavg, TMAX,wtmax,TMIN,wtmin, minYear, maxYear) %>%
-  group_by(Site.Agg, Species) %>%
+  group_by(Site.Agg, SpF) %>%
   summarize(Xwtavg=mean(wtavg, na.rm=T),
             Xwtmax=mean(wtmax, na.rm=T),
             Xwtmin=mean(wtmin, na.rm=T),
@@ -323,6 +345,7 @@ w.sum<-site.airT %>%
             nobs=n(),
             minYear=mean(minYear),
             maxYear=mean(maxYear))
+
 
 write.csv(w.sum, 'data/weatherSum.csv')
 

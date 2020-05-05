@@ -16,7 +16,8 @@ BigRiverHUC8<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07140104_HU8_S
 IllinoisHUC8<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07130011_HU8_Shape/Shape", layer = "NHDFlowline")
 ElkRiverHUC8<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07110006_HU8_Shape/Shape", layer="NHDFlowline")
 FrenchHUC8<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_05010004_HU8_Shape/Shape", layer="NHDFlowline")
-KankakeeHUC8<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07120002_HU8_Shape/Shape", layer="NHDFlowline")
+KankakeeHUC8<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07120002_HU8_Shape/Shape", layer="NHDFlowline") 
+names(KankakeeHUC8)<-toupper(names(KankakeeHUC8))
 
 WS1<-rbind(KiamichiHUC8[grep("Kiamichi",KiamichiHUC8$GNIS_NAME),],
            LittleHUC8[grep("Little River",LittleHUC8$GNIS_NAME),])
@@ -118,6 +119,23 @@ text(TSsiteLocations$Longitude[1:2], TSsiteLocations$Latitude[1:2],
      label=TSsiteLocations$SiteID[1:2],cex=.8, pos=4)
 
 # publication ready plot -----
+#pulling watersheds
+Kiamichiws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/KiamichiShape", layer="WBDHU8")
+Sipseyws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/SipseyShape", layer="WBDHU8")
+Grandws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/GrandShape", layer="WBDHU8")
+StCroixws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/StCroixShape", layer="WBDHU8")
+MissMNws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/MississippiShape", layer="WBDHU8")
+Texasws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/TexasShape", layer="WBDHU8")
+Kishwakws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07090006_HU8_Shape/Shape", layer = "WBDHU8")
+Iowaws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07080101_HU8_Shape/Shape", layer = "WBDHU8")
+BigRiverws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07140104_HU8_Shape/Shape", layer="WBDHU8")
+Illinoisws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07130011_HU8_Shape/Shape", layer = "WBDHU8")
+ElkRiverws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07110006_HU8_Shape/Shape", layer="WBDHU8")
+Frenchws<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_05010004_HU8_Shape/Shape", layer="WBDHU8")
+Kankakeews<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/NHD_H_07120002_HU8_Shape/Shape", layer="WBDHU8") 
+names(Kankakeews)<-toupper(names(Kankakeews))
+#converting to ggplot
+
 usa <- map_data("usa")
 states <- map_data("state",c('texas','oklahoma','kansas','south dakota','north dakota',
                              'arkansas','louisiana','indiana','kentucky','nebraska',
@@ -129,10 +147,17 @@ states <- map_data("state",c('texas','oklahoma','kansas','south dakota','north d
 interior<-rbind(KiamichiHUC8[grep("Kiamichi",KiamichiHUC8$GNIS_NAME),],
            LittleHUC8[grep("Little River",LittleHUC8$GNIS_NAME),]) %>%
   broom::tidy() %>% mutate(region="Interior Highlands")
+intWS<-rbind(Kiamichiws[grep("Kiamichi",Kiamichiws$NAME),], 
+             Kiamichiws[grep("Upper Little",Kiamichiws$NAME),]) %>%
+  broom::tidy() %>% mutate(region="Interior Highlands")
 mobile<-SipseyHUC8[grep("Sipsey", SipseyHUC8$GNIS_NAME),-c(13:15)] %>%
+  broom::tidy() %>% mutate(region="Mobile Basin")
+mobWS<-Sipseyws[grep("Sipsey", Sipseyws$NAME),-c(13:15)] %>%
   broom::tidy() %>% mutate(region="Mobile Basin")
 stlaw<- rbind(GrandHUC8[grep("Grand",GrandHUC8$GNIS_NAME),-c(13:15)],
               FrenchHUC8[FrenchHUC8$GNIS_NAME=="French Creek", -c(13:15)]) %>%
+  broom::tidy() %>% mutate(region="St Lawrence-Great Lakes")
+stlawWS<-rbind(Grandws, Frenchws) %>%
   broom::tidy() %>% mutate(region="St Lawrence-Great Lakes")
 upmis<- rbind(StCroixHUC8[grep("Croix", StCroixHUC8$GNIS_NAME),-c(13:15)],
               MissMNHUC8[grep("Mississippi", MissMNHUC8$GNIS_NAME),-c(13:15)]) %>%
@@ -141,46 +166,63 @@ upmis<- rbind(StCroixHUC8[grep("Croix", StCroixHUC8$GNIS_NAME),-c(13:15)],
   rbind(BigRiverHUC8[grep("Big River", BigRiverHUC8$GNIS_NAME),-c(13:15)]) %>%
   rbind(ElkRiverHUC8[grep("Salt River", ElkRiverHUC8$GNIS_NAME), -c(13:15)]) %>%
   rbind(IllinoisHUC8[grep("Illinois",IllinoisHUC8$GNIS_NAME),-c(13:15)])%>%
-  rbind(KankakeeHUC8[grep("Iroquois",KankakeeHUC8$GNIS_NAME), -c(13:15)]) %>%
+  rbind(KankakeeHUC8[grep("Iroquois",KankakeeHUC8$GNIS_NAME), -c(1,13:15)]) %>%
+  broom::tidy() %>% mutate(region="Upper Mississippi")
+upmisWS<-rbind(StCroixws, MissMNws) %>%
+  rbind(Kishwakws) %>% rbind(Iowaws) %>% rbind(BigRiverws) %>%
+  rbind(ElkRiverws) %>%  rbind(Illinoisws) %>%  rbind(Kankakeews[,-1]) %>%
   broom::tidy() %>% mutate(region="Upper Mississippi")
 txts<-rbind(TexasHUC8[grep("Guadalupe River", TexasHUC8$GNIS_NAME),-c(13:15)],
            TexasHUC8[grep("Colorado River", TexasHUC8$GNIS_NAME), -c(13:15)])%>%
   broom::tidy() %>% mutate(region="Western Gulf")
+txWS<-rbind(Texasws[grep("Guadalupe", Texasws$NAME),-c(13:15)],
+            Texasws[grep("Colorado", Texasws$NAME), -c(13:15)]) %>%
+  rbind(Texasws[grep("12090201", Texasws$HUC8), -c(13:15)]) %>%
+  rbind(Texasws[grep("12090205", Texasws$HUC8), -c(13:15)]) %>%
+  broom::tidy() %>% mutate(region="Western Gulf")
+
+temp<-rbind(Texasws[grep("Guadalupe", Texasws$NAME),-c(13:15)],
+            Texasws[grep("Colorado", Texasws$NAME), -c(13:15)]) %>%
+  rbind(Texasws[grep("12090201", Texasws$HUC8), -c(13:15)])
 
 tssites<-TSsiteLocations[TSsiteLocations$Site.Agg %in% c(Asites, Lsites),-c(1,3,4,11)]
 tssites<-tssites[which(!duplicated(tssites@data)),]
 tidysites<-data.frame(tssites) 
-
+colorvector<-c('#b3bd28','#ca6833','#00822d','#0069d6','#c64579')
 usstreams<-broom::tidy(bigR)
 library(ggplot2); library(ggrepel) 
 ggplot()+
   geom_polygon(data = states, aes(x = long, y = lat, group=group), 
                color="black",fill="white")+
-  geom_path(data = usstreams, aes(x=long, y = lat, group = group), 
-            color="dark grey") +
-  geom_path(data=txts, aes(x=long, y=lat, group=group, color=region),
-            size=1.5)+
-  geom_path(data=mobile, aes(x=long, y=lat, group=group, color=region),
-            size=1.5)+
-  geom_path(data=interior, aes(x=long, y=lat, group=group, color=region),
-            size=1.5)+
-  geom_path(data=stlaw, aes(x=long, y=lat, group=group, color=region),
-            size=1.5)+
-  geom_path(data=upmis, aes(x=long, y=lat, group=group, color=region),
-            size=1.5)+
+  geom_polygon(data=intWS, aes(x=long, y=lat, group=group, fill=region), alpha=.5)+
+  geom_polygon(data=mobWS, aes(x=long, y=lat, group=group, fill=region),alpha=.5)+
+  geom_polygon(data=stlawWS, aes(x=long, y=lat, group=group, fill=region),alpha=.5)+
+  geom_polygon(data=upmisWS, aes(x=long, y=lat, group=group, fill=region),alpha=.5)+
+  geom_polygon(data=txWS, aes(x=long, y=lat, group=group, fill=region),alpha=.5)+
+  geom_path(data = usstreams, aes(x=long, y = lat, group = group), color="dark grey") +
+  geom_path(data=txts, aes(x=long, y=lat, group=group, color=region))+
+  geom_path(data=mobile, aes(x=long, y=lat, group=group,color=region))+
+  geom_path(data=interior, aes(x=long, y=lat, group=group,color=region))+
+  geom_path(data=stlaw, aes(x=long, y=lat, group=group,color=region))+
+  geom_path(data=upmis, aes(x=long, y=lat, group=group, color=region))+
   geom_point(data=tidysites, aes(x=Long.cor, y=Lat.cor))+
   #geom_text_repel(data=tidysites, aes(x=Long.cor, y=Lat.cor, 
   #                                    label=Site.Agg), size=3)+
   scale_colour_manual(name="Biogeographic Province",
                       breaks=c("Upper Mississippi","St Lawrence-Great Lakes",
                                "Interior Highlands","Mobile Basin","Western Gulf"),
-                      values=wes_palette("Darjeeling1"))+
+                      values=colorvector)+
+  scale_fill_manual(name="Biogeographic Province",
+                      breaks=c("Upper Mississippi","St Lawrence-Great Lakes",
+                               "Interior Highlands","Mobile Basin","Western Gulf"),
+                      values=colorvector)+
   labs(x='Longitude', y='Latitude')+theme_minimal()+
   theme(legend.position ="bottom", 
         legend.box.background = element_rect(fill="white"))+
-  guides(col = guide_legend(nrow = 2, title.position="top"))+
+  guides(fill = guide_legend(nrow = 2, title.position="top"),
+         col = guide_legend(nrow = 2, title.position="top"))+
   coord_cartesian()
-ggsave('figures/mapFull.tiff', width=5, height=5.8)
+ggsave('figures/mapFull2.tiff', width=5, height=5.8)
 
 # pulling out the HUC12 to access weather data ----
 KiamichiHUC12<-readOGR(dsn="C:/Users/Owner/Documents/GISfile/KiamichiShape", layer="WBDHU12")

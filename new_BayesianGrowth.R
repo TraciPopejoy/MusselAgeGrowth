@@ -17,7 +17,7 @@ library(rjags);library(MCMCpack)
 
 nadapt=5000
 burnin=10000
-nit=70000
+nit=100000
 thin=4
 
 ##### Model Code #####
@@ -32,16 +32,16 @@ tau ~ dgamma(0.1, 0.1) #variance on L
 
 for(u in 1:nid){
 # so Lmax, K and T0 will be unique for each individual
-Lmax[u]~ dnorm(mu_l, tau_l)
-K[u] ~ dnorm(mu_k, tau_k)
-T0[u] ~ dnorm(mu_t0, tau_t0)
+Lmax[u]~ dnorm(mu_l, tau_l)T(0,1e7)
+K[u] ~ dnorm(mu_k, tau_k)T(0,1e7)
+T0[u] ~ dnorm(mu_t0, tau_t0)T(0,1e7)
 }
 
 # hyper parameter priors
-mu_l ~ dunif(60, 160)
+mu_l ~ dunif(60, 200)
 tau_l ~ dgamma(.01,.01)
 
-mu_k ~ dunif(0.01,1)
+mu_k ~ dunif(0.001,1)
 tau_k ~ dgamma(.0001,.0001)
 
 mu_t0 ~ dnorm (0, .1)
@@ -253,11 +253,6 @@ amb.lmax.graph1<-mcmc_intervals_data(amb.mcmc.data[,-1], regex_pars = "mu_l") %>
   left_join(SiteID[,c(2,13)]) %>%
   filter(!duplicated(.)) %>%
   mutate(SiteLat=fct_reorder(Site.Agg,Lat.cor))
-amb.lmax.graph1$image <- "figures/amblemaP.png"
-library(ggimage)
-#abiorect<-data.frame(xmin=c(29.3,31.5,33.5),
-#                     xmax=c(31.5,33.5,37), 
-#                     ymin=rep(59,3), ymax=rep(62,3))
 almax.con<-ggplot(amb.lmax.graph1) +
   #geom_rect(data=abiorect, aes(xmin=xmin,xmax=xmax,
   #                               ymin=ymin,ymax=ymax), 
@@ -295,17 +290,17 @@ ggsave("figures/LmaxContinuous.tiff", width=6.5, height=7)
 plot_grid(llmax.dis, almax.dis, ncol=1, labels="AUTO")
 ggsave("figures/LmaxDiscrete.tiff", width=6.5, height=7)
 
-
+colorvector<-c('#b3bd28','#ca6833','#00822d','#0069d6','#c64579')
 lmax.graph<-bind_rows(amb.lmax.graph1 %>% mutate(Species="A. plicata"),
           lamp.lmax.graph1 %>% mutate(Species="Lampsilis spp.")) %>%
   mutate(SiteLat=fct_reorder(Site.Agg,Lat.cor))
 bioregrect<-data.frame(xmin=c(0,2.5,6.5,12.5,24.5,22.5),
                        xmax=c(2.5,6.5,12.5,28.5,25.5,23.5), 
-                       ymin=rep(59,6), ymax=rep(62,6))
+                       ymin=rep(55,6), ymax=rep(60,6))
 lmax.dis<-ggplot(lmax.graph) +
   geom_rect(data=bioregrect, aes(xmin=xmin,xmax=xmax,
                                  ymin=ymin,ymax=ymax), 
-            fill=wes_palette("Darjeeling1")[c(1,4,3,5,2,2)])+
+            fill=colorvector[c(5,2,1,4,3,3)])+
   geom_linerange(aes(ymin = ll, ymax = hh, x = SiteLat,
                      group=Species), position=position_dodge(.75))+  #outer line
   geom_linerange(aes(ymin = l, ymax = h, x = SiteLat, group=Species),
@@ -315,7 +310,9 @@ lmax.dis<-ggplot(lmax.graph) +
              position=position_dodge(.75))+
   scale_y_continuous(name="Maximum Length (mm)")+
   scale_x_discrete(name="Sites")+
-  scale_fill_manual(values=c("white","darkgrey"))+
+  scale_fill_manual(values=c("white","darkgrey"),
+                    labels=c(expression(italic("A. plicata")),
+                             expression(italic("Lampsilis ")*spp.)))+
   theme_classic()+
   theme(axis.text.x = element_text(angle = 40, hjust=1),
         legend.position = 'top')
@@ -335,23 +332,15 @@ lamp.mcmc.sum %>% filter(variable=="mu_l") %>% summarise(mean(x50), min(x50), ma
 lamp.mcmc.sum %>% filter(variable=="mu_k") %>% summarise(mean(x50), min(x50), max(x50))
 lamp.mcmc.sum %>% filter(variable=="mu_t0") %>% summarise(mean(x50), min(x50), max(x50))
 
-# compare between sites with both species
-ggplot(lmax.graph[lmax.graph$Site.Agg %in% c("K2","KT","K4","KS","K7",
-                                             "MS1","Upstream","Sylvan",
-                                             "STF","Hudson",
-                                             "Barry","Wendel3","MusselMania","Wendel2"),]) +
-  geom_linerange(aes(ymin = ll, ymax = hh, x = SiteLat,
-                     group=Species), position=position_dodge(.75))+  #outer line
-  geom_linerange(aes(ymin = l, ymax = h, x = SiteLat, group=Species),
-                 size = 2,position=position_dodge(.75))+ #inner line
-  geom_point(aes(x = SiteLat, y = m, fill=Species, group=Species), 
-             size = 3, shape= 21, 
-             position=position_dodge(.75))+
-  #geom_text(aes(x = SiteLat, y = 60, label=seq(1:40), group=Species),
-  #          position=position_dodge(.75), size=3)+
-  scale_y_continuous(name="Maximum Length (mm)")+
-  scale_x_discrete(name="Sites")+
-  scale_fill_manual(values=c("white","darkgrey"))+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 40, hjust=.9),
-        legend.position = 'top')
+# Table 2
+lkt.table<-lamp.mcmc.sum %>%
+  mutate(Sp="LAMP") %>%
+  bind_rows(amb.mcmc.sum %>% mutate(Sp="APLI"))%>%
+  mutate(Site.Agg=recode(SiteID, 
+                         Wendel2="Wendell2", Wendel3="Wendell3")) %>%
+  select(-SiteID) %>%
+  left_join(SiteID) %>%
+  select(Site.Agg, Lat.cor, variable, Sp, x50) %>%
+  pivot_wider(names_from=variable, values_from=x50, values_fn=list(x50=mean)) %>%
+  arrange(Sp,Lat.cor)
+write.csv(lkt.table, "figures/Table2KLT.csv")
