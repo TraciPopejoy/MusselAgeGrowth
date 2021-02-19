@@ -1,4 +1,5 @@
-library(readxl);library(dplR);library(ggplot2); library(tidyverse)
+library(readxl);library(ggplot2); library(tidyverse)
+#library(dplR)
 #load in data
 rw<-read_excel('data/growth.xlsx', sheet="rwl")
 SlideData<-read_excel('data/growth.xlsx', sheet="SlideData")

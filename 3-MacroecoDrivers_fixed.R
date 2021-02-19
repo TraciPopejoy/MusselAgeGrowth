@@ -158,21 +158,27 @@ write.csv(site.schar, 'data/SiteChar.csv')
 library(raster); library(FedData); library(rgdal)
 
 landprop.sum<-NULL
-for(m in 1:28){
+for(m in unique(Site.data$Site.Agg)){
   Sp.Site.data<-Site.data %>% ungroup() %>%
     dplyr::select(Site.Agg, Lat.cor, Long.cor) %>%
-    filter(!duplicated(.)) %>%
-    slice(m)
+    filter(Site.Agg==m) %>%
+    slice(1)
   print(Sp.Site.data$Site.Agg)
   coordinates(Sp.Site.data) <- ~Long.cor + Lat.cor
   proj4string(Sp.Site.data) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84")
   
   #download land cover data; takes a while (~30s per tile)
   buff_site<-buffer(Sp.Site.data, width=100)
+  # older code not working
+  #nlcd_raster <- get_nlcd(buff_site,
+  #                        label=paste(Sp.Site.data$Site.Agg),
+  #                        extraction.dir = './EXTRACTIONS/',
+  #                        dataset="landcover")
+  # below replaces it
+  nlcd_raster<-raster(paste0("./EXTRACTIONS/", Sp.Site.data$Site.Agg,
+                             "/NLCD/", Sp.Site.data$Site.Agg, 
+                      "_NLCD_2011_landcover.tif"))
   
-  nlcd_raster <- get_nlcd(buff_site,
-                          label=paste(Sp.Site.data$Site.Agg),
-                          dataset="landcover")
   
   # reproject your data to raster's crs
   buff_site <- spTransform(buff_site, projection(nlcd_raster))
@@ -182,8 +188,9 @@ for(m in 1:28){
     cbind(Site.Agg=Sp.Site.data$Site.Agg)
   landprop.sum<-bind_rows(landprop.sum, landprop)
 }
+landprop.sum %>% pull(Site.Agg) %>% unique()
 site.landuse <- landprop.sum %>%
-  mutate(ID=as.numeric(landcover)) %>%
+  mutate(ID=as.numeric(paste(landcover))) %>%
   left_join(nlcd_raster@data@attributes[[1]][,c(1,8)]) 
 site.landuse %>% group_by(Site.Agg) %>% #checking it sums to one
   summarize(sumF=sum(Freq)) %>%
