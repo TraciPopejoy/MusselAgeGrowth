@@ -1,4 +1,4 @@
-vl<-c(paste("mu_l",1:16, sep="_"))
+vl<-c(paste("h_mu_l",1:12, sep="_"))
 names(vl)<-Lsites
 va<-c(paste("mu_l", 1:24, sep="_"))
 names(va)<-Asites
@@ -12,7 +12,7 @@ amb.mcmc.chains<-read.csv("Amb_Lmax_mcmcres.csv") %>%
   dplyr::select(SpF,Site.Agg, Lat.cor, x50)
 lam.mcmc.chains<-read.csv("Lamp_Lmax_mcmcres.csv") %>%
   dplyr::sample_frac(.10) %>%
-  dplyr::select(starts_with("mu_l")) %>%
+  dplyr::select(starts_with("h_mu_l")) %>%
   dplyr::rename(all_of(vl)) %>%
   gather(Site.Agg, x50) %>%
   left_join(SiteID) %>%
@@ -27,16 +27,19 @@ head(mcmc.chains)
 amb.mcmc.sum<-read.csv("Amb_Lmax_mcmc_sum.csv")
 lamp.mcmc.sum<-read.csv("Lamp_Lmax_mcmc_sum.csv")
 lmax.long<-lamp.mcmc.sum %>%
-  mutate(Sp="LAMP") %>%
-  bind_rows(amb.mcmc.sum %>% mutate(Sp="APLI"))%>%
+  mutate(Sp="LAMP") %>% select(-X) %>%
+  filter(variable=="h_mu_l")%>%
+  bind_rows(amb.mcmc.sum %>% mutate(Sp="APLI") %>% 
+              select(-X) %>%
+              filter(variable=="mu_l"))%>%
   mutate(Site.Agg=recode(SiteID, 
                        Wendel2="Wendell2", Wendel3="Wendell3")) %>%
+  filter(Site.Agg != 'Wendell2') %>%
   select(-SiteID) %>%
   left_join(SiteID) %>%
-  filter(variable=="mu_l")%>%
   group_by(Sp) %>%
-  mutate(mu_l_z=scale(x50, center=F),
-         Latscale=scale(Lat.cor, center=F),
+  mutate(mu_l_z=scale(x50, center=F)[,1],
+         Latscale=scale(Lat.cor, center=F)[,1],
          precision=1/SD^2) %>%
   ungroup() %>%
   mutate(SpF=factor(Sp), 
@@ -104,7 +107,7 @@ beta.model<-jags.model(textConnection(test_model_string),
                               Latitude = lmax.long$Lat.cor,
                               SpF=lmax.long$SpF,
                               tau=lmax.long$precision,
-                              nobs=40),
+                              nobs=35),
                     n.chains=3, n.adapt=10000)
 update(beta.model, 30000) # burn in for 2000 samples
 beta.mcmc<-coda.samples(beta.model,
@@ -115,7 +118,7 @@ plot(beta.mcmc)
 gelman.plot(beta.mcmc)
 dev.off()
 
-gelman.diag(beta.mcmc)[[1]]
+gelman.diag(beta.mcmc, multivariate = F)
 
 summary(beta.mcmc)
 library(bayesplot)
@@ -129,20 +132,22 @@ mcmc_intervals(beta.mcmc, pars=c('beta[1]', 'beta[2]'))+
 
 beta.plot<-mcmc_intervals(beta.mcmc, pars = c("beta[1]", "beta[2]"))+
   scale_y_discrete(labels=c(expression(italic("A. plicata")),
-                            expression(italic("Lampsilis ")*spp.)))+
+                            expression(italic("L. cardium"))))+
   theme_classic()+
-  ggtitle("percent Max. Length = slope * Latitude + intercept")+
-  xlab(expression("% Max. Length"%.%"Latitude"^-1))
+  ggtitle("% Max. Length = slope * Latitude + intercept")+
+  xlab(expression("% Max. Length"%.%"Latitude"^-1))+
+  theme(title=element_text(size=8))
 
 difbeta.plot<-mcmc_areas(beta.mcmc, pars="difbeta")+
   theme_classic()+
-  ggtitle(expression(italic("A. plicata")*" slope - "*italic("Lampsilis")*" spp. slope"))+
+  ggtitle(expression(italic("A. plicata")*" slope - "*italic("L. cardium")*" slope"))+
   scale_y_discrete(labels="Lampsilis spp.")+
-  theme(axis.text.y = element_text(color="white"))
+  theme(axis.text.y = element_text(color="white"),
+        title = element_text(size=9))
 
 plot_grid(beta.plot,difbeta.plot, ncol=1, labels="AUTO",
-          rel_heights= c(1,.7))
-ggsave("figures/Figure4beta.tiff", width=5, height=5)
+          rel_heights= c(1,.75), align=c('v'))
+ggsave("figures/Figure4beta.tiff", width=3.5, height=3.5)
 
 summary(lmax.long[lmax.long$SpF=="APLI",]$x50);summary(lmax.long[lmax.long$SpF=="APLI",]$mu_l_z)
 summary(lmax.long[lmax.long$SpF=="LAMP",]$x50);summary(lmax.long[lmax.long$SpF=="LAMP",]$mu_l_z)

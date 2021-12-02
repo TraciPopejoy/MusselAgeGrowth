@@ -14,6 +14,7 @@ apfiles1<-paste("data/apli_raw/physxd_fin/",
                list.files(path="data/apli_raw/physxd_fin/"), sep="")
 lcfiles1<-paste("data/lamp_raw/physxd_fin/",
                 list.files(path="data/lamp_raw/physxd_fin/"), sep="")
+lcfiles1<-lcfiles1[-c(1,12,15,16)]
 AxW1<-NULL
 for (i in 1:length(apfiles1)){
   axws <- read.csv(apfiles1[i]) %>% gather(ShellIDy,AnGrowth,-X)
@@ -55,7 +56,7 @@ anchor<-ShellDim %>%
 reg<-ShellDim %>% bind_rows(anchor) %>%
   group_by(Site.Agg, Species) %>%
   filter(!is.na(Length),!is.na(Width),
-         Species %in% c("LORN","LCAR","APLI","QVER"))%>%
+         Species %in% c("LCAR","APLI","QVER"))%>%
   summarize(Ha=lm(Length~Width)$coefficients[1],
          Hb=lm(Length~Width)$coefficients[2],
          R2=summary(lm(Length~Width))$adj.r.squared*100)
@@ -66,7 +67,7 @@ AxL<-AxW %>%
   mutate(est.Length=Ha+est.Width*Hb,
          Age.adj=Age+as.numeric(start.annuli)) %>%
   dplyr::select(Species,Site,Year, Shell.ID,  AnGrowth,
-         Age.adj,Age, age, est.Length,Length, est.Width) %>%
+         Age.adj,Age, age, est.Length,Length, est.Width, Sex) %>%
   rename(id=Shell.ID, L=est.Length, Age.unadj=Age,Age=Age.adj)
 
 #check the shells that had eroded umbos (age underestimate)
@@ -93,7 +94,7 @@ tb1<-AxL %>% ungroup() %>%
             minAge=min(age)) %>%
   left_join(reg) %>%
   left_join(is_spline)
-write.csv(tb1, "figures/table1shell.csv")
+write.csv(tb1, "figures/table1shell_20211018.csv")
 min(tb1$R2, na.rm=T) #adj r
 min(tb1$Cor, na.rm=T); max(tb1$Cor, na.rm=T) #interseries correlation range
 
@@ -101,10 +102,10 @@ ss_mat<-AxL %>% left_join(SiteID, by=c('Site'='SiteID')) %>%
   group_by(River) %>% arrange(desc(Lat.cor)) %>%
   summarize(Sitesss=paste(unique(Site.Agg), collapse = ', '),
             Spss=paste(unique(Species), collapse = ', '))
-write.csv(ss_mat, "figures/table1sites.csv")
+write.csv(ss_mat, "figures/table1sites_20211018.csv")
 
 
-#plot for powerpoint
+#plot for powerpoint -----
 head(AxL)
 AxL %>%  select(Site,id) %>%
   slice(1) %>% group_by(Site) %>% tally() %>%
@@ -140,3 +141,11 @@ allcar<-ggplot()+
   theme(plot.title = element_text(hjust=.5),
         axis.title.y = element_text(size=0))
 plot_grid(alapli, allcar)
+
+
+AxL %>% left_join(SiteID, by=c('Site'='SiteID')) %>%
+  group_by(Site.Agg, Species) %>%
+  summarize(maxYear=max(Year), minYear=min(Year), maxAge=max(Age),
+            Lat.cor=mean(Lat.cor)) %>% arrange(Lat.cor) %>%
+  View()
+

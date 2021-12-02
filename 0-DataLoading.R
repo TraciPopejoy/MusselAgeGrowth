@@ -53,7 +53,7 @@ for(i in 1:length(apli_xd)){
 
 #### Lampsilis ------
 rw.long.lamp<-rw.long %>% 
-  filter(Species %in% c("LCAR","LORN")) %>%
+  filter(Species == "LCAR") %>%
   select(-Shell.ID.y, -PS)
 
 lamp.sites<-NULL
@@ -73,8 +73,13 @@ for(i in 1:length(lamp.sites)){
                                                ".csv", sep = ""), sep=""))
 }
 
+#identyifying just those that are lcar
+rw.long %>% filter(Species=='LCAR') %>% pull(Site.Agg) %>% unique()
+rw.long %>% filter(Species=='LORN') %>% pull(Site.Agg) %>% unique()
+
 lcfiles<-paste("data/lamp_raw/physxd_fin/",
-               list.files(path="data/lamp_raw/physxd_fin/"), sep="")
+               list.files(path="data/lamp_raw/physxd_fin/"), sep="") 
+lcfiles<-lcfiles[-c(1,12,15,16)]
 for (i in 1:length(lcfiles)){
   lamp_xd = lapply(lcfiles, read.csv,row.names = "X")
 } 
